@@ -1,59 +1,95 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { comparativesQuestions } from "@/data/content/comparatives";
+import { comparativeKnowledge } from "@/data/knowledge/comparative";
 import {
-  calculateCurrentStreak,
-  calculateQuestionXp,
   calculateStars,
-  getCorrectRate,
+  evaluateQuestionAnswer,
+  getAttemptStats,
   getLevelProgress,
-  isAnswerCorrect,
-  normalizeAnswer,
+  getSubtopicStats,
 } from "@/lib/game";
+import type { AppStorage, Question } from "@/types/agent";
 
-test("答案判断忽略大小写、首尾空格和句末标点", () => {
-  assert.equal(normalizeAnswer("  My Dog is Bigger than yours. "), "my dog is bigger than yours");
-  const question = comparativesQuestions.find(
-    (item) => item.id === "translate-dog-bigger",
-  );
-  assert.ok(question);
-  assert.equal(isAnswerCorrect(question, "my dog is bigger than yours"), true);
-  assert.equal(isAnswerCorrect(question, "My dog is biggest than yours."), false);
+const choiceQuestion: Question = {
+  id: "q-choice",
+  type: "choice",
+  question: "happy 的比较级是？",
+  options: ["happyer", "happier"],
+  answer: "happier",
+  explanation: "y 改成 i。",
+  knowledgeId: "comparative",
+  knowledgeSubtopic: "y-ending",
+  difficulty: 2,
+};
+
+const trueFalseQuestion: Question = {
+  id: "q-tf",
+  type: "true-false",
+  question: "hotter 是 hot 的比较级。",
+  answer: true,
+  explanation: "hot 双写 t。",
+  knowledgeId: "comparative",
+  knowledgeSubtopic: "double-consonant",
+  difficulty: 1,
+};
+
+test("choice 和 true-false 都由程序本地判断", () => {
+  assert.equal(evaluateQuestionAnswer(choiceQuestion, "Happier"), true);
+  assert.equal(evaluateQuestionAnswer(choiceQuestion, "happyer"), false);
+  assert.equal(evaluateQuestionAnswer(trueFalseQuestion, true), true);
+  assert.equal(evaluateQuestionAnswer(trueFalseQuestion, false), false);
 });
 
-test("选择题答案判断准确", () => {
-  const question = comparativesQuestions.find(
-    (item) => item.id === "large-comparative-choice",
-  );
-  assert.ok(question);
-  assert.equal(isAnswerCorrect(question, "larger"), true);
-  assert.equal(isAnswerCorrect(question, "largeer"), false);
-});
-
-test("连续答对会获得少量 XP bonus", () => {
-  assert.equal(calculateQuestionXp(false, 0), 0);
-  assert.equal(calculateQuestionXp(true, 1), 10);
-  assert.equal(calculateQuestionXp(true, 2), 12);
-  assert.equal(calculateQuestionXp(true, 8), 16);
-});
-
-test("星级、正确率和等级进度可计算", () => {
-  assert.equal(calculateStars(10, 10), 3);
-  assert.equal(calculateStars(8, 10), 2);
-  assert.equal(calculateStars(6, 10), 1);
-  assert.equal(getCorrectRate(7, 10), 70);
-  assert.deepEqual(getLevelProgress(350), {
-    level: 2,
-    currentXp: 50,
-    xpForNextLevel: 300,
-    percent: 17,
+test("Attempt 统计、星级和等级进度可计算", () => {
+  const attempts = [
+    { correct: true },
+    { correct: true },
+    { correct: false },
+    { correct: true },
+  ];
+  assert.deepEqual(getAttemptStats(attempts as never), {
+    correct: 3,
+    total: 4,
+    wrong: 1,
+    accuracy: 75,
   });
+  assert.equal(calculateStars(9, 10), 3);
+  assert.equal(getLevelProgress(350).level, 2);
 });
 
-test("连续答对长度从当前题向前计算", () => {
-  const ids = ["a", "b", "c", "d"];
-  const results = { a: true, b: false, c: true, d: true };
-  assert.equal(calculateCurrentStreak(ids, results, 3), 2);
-  assert.equal(calculateCurrentStreak(ids, results, 1), 0);
+test("Subtopic 统计来自客观 Attempt 和 Question", () => {
+  const storage = {
+    questions: [choiceQuestion, trueFalseQuestion],
+    attempts: [
+      {
+        id: "a1",
+        sessionId: "s1",
+        knowledgeId: "comparative",
+        questionId: choiceQuestion.id,
+        answer: "happier",
+        correct: true,
+        timestamp: 1,
+      },
+      {
+        id: "a2",
+        sessionId: "s1",
+        knowledgeId: "comparative",
+        questionId: trueFalseQuestion.id,
+        answer: false,
+        correct: false,
+        timestamp: 2,
+      },
+    ],
+  } as Pick<AppStorage, "attempts" | "questions">;
+
+  const stats = getSubtopicStats(storage, comparativeKnowledge);
+  assert.equal(
+    stats.find((item) => item.subtopicId === "y-ending")?.accuracy,
+    100,
+  );
+  assert.equal(
+    stats.find((item) => item.subtopicId === "double-consonant")?.accuracy,
+    0,
+  );
 });

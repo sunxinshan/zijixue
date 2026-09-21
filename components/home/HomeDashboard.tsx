@@ -3,48 +3,64 @@
 import Link from "next/link";
 import { useMemo } from "react";
 
-import {
-  comparativesKnowledgePoints,
-  comparativesQuestions,
-  comparativesSectionId,
-} from "@/data/content/comparatives";
-import { getLevelProgress } from "@/lib/game";
-import { getAverageMastery, getMasteryMeta } from "@/lib/mastery";
-import { useAppStorage } from "@/lib/use-app-storage";
+import { comparativeKnowledge } from "@/data/knowledge/comparative";
 import { ForestBackdrop } from "@/components/shared/ForestBackdrop";
 import { ProgressBar } from "@/components/shared/ProgressBar";
+import {
+  calculateStars,
+  getLevelProgress,
+  getSubtopicStats,
+  getTotalXp,
+} from "@/lib/game";
+import { getMasteryMeta } from "@/lib/mastery";
+import { getLearningState } from "@/lib/storage";
+import { useAppStorage } from "@/lib/use-app-storage";
 
 export function HomeDashboard() {
   const storage = useAppStorage();
 
   const view = useMemo(() => {
-    const player = storage.player;
-    const progress = getLevelProgress(player?.xp ?? 0);
-    const mastery = storage.mastery;
-    const average = getAverageMastery(
-      mastery,
-      comparativesKnowledgePoints.map((point) => point.id),
-    );
-    const wrongQuestionIds = new Set(
-      storage.attempts
-        .filter((attempt) => !attempt.isCorrect)
-        .map((attempt) => attempt.questionId),
+    const learningState = getLearningState(storage, comparativeKnowledge.id);
+    const stats = getSubtopicStats(storage, comparativeKnowledge);
+    const completedSessions = storage.sessions.filter(
+      (session) => session.status === "completed",
     );
     const bestStars = Math.max(
       0,
-      ...storage.challenges.map((challenge) => challenge.stars),
+      ...completedSessions.map((session) => {
+        const attempts = storage.attempts.filter(
+          (attempt) => attempt.sessionId === session.id,
+        );
+        const correct = attempts.filter((attempt) => attempt.correct).length;
+        return calculateStars(correct, attempts.length);
+      }),
     );
+    const focusTitles = (learningState?.recommendedFocus ?? [])
+      .map(
+        (id) =>
+          comparativeKnowledge.subtopics.find((subtopic) => subtopic.id === id)
+            ?.title,
+      )
+      .filter((title): title is string => Boolean(title));
 
     return {
-      player,
-      progress,
-      mastery,
-      average,
-      wrongQuestionCount: wrongQuestionIds.size,
+      learningState,
+      stats,
       bestStars,
-      completedRounds: storage.challenges.length,
+      focusTitles,
+      totalXp: getTotalXp(storage),
+      progress: getLevelProgress(getTotalXp(storage)),
+      completedSessions: completedSessions.length,
+      wrongQuestionCount: new Set(
+        storage.attempts
+          .filter((attempt) => !attempt.correct)
+          .map((attempt) => attempt.questionId),
+      ).size,
     };
   }, [storage]);
+
+  const mastery = view.learningState?.mastery ?? 0;
+  const masteryMeta = getMasteryMeta(mastery);
 
   return (
     <ForestBackdrop>
@@ -80,27 +96,32 @@ export function HomeDashboard() {
           </div>
           <div className="relative max-w-xl">
             <span className="inline-flex rounded-full bg-white/20 px-3 py-1 text-xs font-black tracking-wide">
-              今日挑战
+              Agent 教学
             </span>
             <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">
               比较级大冒险
             </h1>
             <p className="mt-3 max-w-md text-sm font-semibold leading-6 text-white/85 sm:text-base">
-              先看 5 类变化规则，再完成 10 道题。每答对一题都会获得 XP！
+              Agent 会读取长期学习状态，每次动态生成 10 道选择或判断题。
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-3 text-sm font-bold">
               <span className="rounded-2xl bg-white/15 px-3 py-2">
-                {comparativesQuestions.length} 题题库
+                一批 10 题
               </span>
               <span className="rounded-2xl bg-white/15 px-3 py-2">
-                一轮 10 题
+                {masteryMeta.icon} {masteryMeta.label}
               </span>
               <span className="rounded-2xl bg-white/15 px-3 py-2">
                 最佳 {view.bestStars > 0 ? "⭐".repeat(view.bestStars) : "—"}
               </span>
             </div>
+            {view.focusTitles.length > 0 ? (
+              <p className="mt-4 text-sm font-bold text-white/90">
+                当前建议重点：{view.focusTitles.join("、")}
+              </p>
+            ) : null}
             <Link
-              href={`/knowledge/${comparativesSectionId}`}
+              href={`/knowledge/${comparativeKnowledge.id}`}
               className="mt-6 inline-flex min-h-14 items-center justify-center rounded-2xl bg-[#fff3a7] px-7 text-base font-black text-[#2f5c25] shadow-lg transition hover:-translate-y-0.5 hover:bg-[#fff7c8]"
             >
               开始学习
@@ -113,14 +134,16 @@ export function HomeDashboard() {
 
         <section className="grid grid-cols-3 gap-3">
           <div className="rounded-3xl bg-white/90 p-4 text-center shadow-sm ring-1 ring-white">
-            <p className="text-2xl">🌿</p>
-            <p className="mt-1 text-xl font-black text-[#205238]">{view.average}%</p>
-            <p className="text-xs font-bold text-[#74887b]">平均掌握度</p>
+            <p className="text-2xl">{masteryMeta.icon}</p>
+            <p className="mt-1 text-xl font-black text-[#205238]">{mastery}%</p>
+            <p className="text-xs font-bold text-[#74887b]">Agent 掌握度</p>
           </div>
           <div className="rounded-3xl bg-white/90 p-4 text-center shadow-sm ring-1 ring-white">
             <p className="text-2xl">⭐</p>
             <p className="mt-1 text-xl font-black text-[#205238]">
-              {view.player.totalStars}
+              {(storage.legacyStars ?? 0) +
+                storage.sessions.filter((session) => session.status === "completed")
+                  .length}
             </p>
             <p className="text-xs font-bold text-[#74887b]">累计星星</p>
           </div>
@@ -138,11 +161,11 @@ export function HomeDashboard() {
             <div>
               <h2 className="text-xl font-black text-[#173f2a]">我的学习</h2>
               <p className="text-sm font-semibold text-[#74887b]">
-                已完成 {view.completedRounds} 轮挑战
+                已完成 {view.completedSessions} 个 Agent Session
               </p>
             </div>
             <Link
-              href={`/knowledge/${comparativesSectionId}`}
+              href={`/knowledge/${comparativeKnowledge.id}`}
               className="text-sm font-black text-[#2c8a56]"
             >
               查看全部规则
@@ -150,28 +173,27 @@ export function HomeDashboard() {
           </div>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            {comparativesKnowledgePoints.map((point) => {
-              const mastery = view.mastery[point.id]?.mastery ?? 0;
-              const meta = getMasteryMeta(mastery);
+            {view.stats.map((stat) => {
+              const meta = getMasteryMeta(stat.accuracy);
               return (
                 <div
-                  key={point.id}
+                  key={stat.subtopicId}
                   className="flex items-center gap-4 rounded-3xl bg-white/90 p-4 shadow-sm ring-1 ring-white"
                 >
                   <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#eef8e8] text-2xl">
-                    {meta.icon}
+                    {stat.total > 0 ? meta.icon : "🌱"}
                   </span>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between gap-3">
                       <p className="truncate font-black text-[#214d32]">
-                        {point.title}
+                        {stat.title}
                       </p>
                       <span className="text-xs font-black text-[#4f7a5e]">
-                        {mastery}%
+                        {stat.total > 0 ? `${stat.accuracy}%` : "待练习"}
                       </span>
                     </div>
                     <div className="mt-2">
-                      <ProgressBar value={mastery} />
+                      <ProgressBar value={stat.accuracy} />
                     </div>
                   </div>
                 </div>
@@ -181,7 +203,7 @@ export function HomeDashboard() {
         </section>
 
         <p className="pb-4 text-center text-xs font-semibold text-[#7d9183]">
-          学习进度会自动保存在这台设备的浏览器中
+          Session、Attempt 和 LearningState 自动保存在这台设备
         </p>
       </main>
     </ForestBackdrop>

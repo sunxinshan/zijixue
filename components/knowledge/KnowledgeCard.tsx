@@ -1,6 +1,11 @@
 "use client";
 
-import type { Example, KnowledgePoint } from "@/types/content";
+import { ProgressBar } from "@/components/shared/ProgressBar";
+import type {
+  KnowledgeExample,
+  KnowledgeRule,
+  KnowledgeSubtopic,
+} from "@/types/agent";
 
 function WordPill({
   word,
@@ -33,65 +38,63 @@ function ExampleRow({
   example,
   onPronounce,
 }: {
-  example: Example;
+  example: KnowledgeExample;
   onPronounce: (word: string) => void;
 }) {
-  if (!example.base) {
-    return (
-      <div className="rounded-2xl bg-[#f8fbf5] p-3 text-sm">
-        <p className="font-bold text-[#214d32]">{example.english}</p>
-        <p className="mt-1 text-[#688072]">{example.chinese}</p>
-      </div>
-    );
-  }
-
   return (
     <div className="flex flex-wrap items-center gap-2">
       <WordPill word={example.base} tone="base" onPronounce={onPronounce} />
       <span className="font-black text-[#91a098]">→</span>
-      {example.comparative ? (
-        <WordPill
-          word={example.comparative}
-          tone="comparative"
-          onPronounce={onPronounce}
-        />
-      ) : null}
-      {example.superlative ? (
-        <>
-          <span className="font-black text-[#91a098]">→</span>
-          <WordPill
-            word={example.superlative}
-            tone="superlative"
-            onPronounce={onPronounce}
-          />
-        </>
-      ) : null}
+      <WordPill
+        word={example.comparative}
+        tone="comparative"
+        onPronounce={onPronounce}
+      />
+      <span className="font-black text-[#91a098]">→</span>
+      <WordPill
+        word={example.superlative}
+        tone="superlative"
+        onPronounce={onPronounce}
+      />
     </div>
   );
 }
 
 export function KnowledgeCard({
-  point,
+  subtopic,
+  rule,
   index,
+  accuracy,
+  totalAttempts,
   onPronounce,
 }: {
-  point: KnowledgePoint;
+  subtopic: KnowledgeSubtopic;
+  rule?: KnowledgeRule;
   index: number;
+  accuracy?: number;
+  totalAttempts?: number;
   onPronounce: (word: string) => void;
 }) {
-  const rule = point.rules?.[0];
-
   return (
     <article className="rounded-[2rem] border border-white bg-white/90 p-5 shadow-[0_16px_45px_rgba(47,108,66,0.10)] backdrop-blur sm:p-6">
       <div className="flex items-start gap-3">
         <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-[#e8f6df] text-lg font-black text-[#277146]">
           {index + 1}
         </span>
-        <div>
-          <h2 className="text-xl font-black text-[#173f2a]">{point.title}</h2>
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xl font-black text-[#173f2a]">{subtopic.title}</h2>
           <p className="mt-1 text-sm font-medium leading-6 text-[#5b7062]">
-            {rule?.explanation ?? point.summary}
+            {rule?.explanation ?? subtopic.description}
           </p>
+          {typeof accuracy === "number" && (totalAttempts ?? 0) > 0 ? (
+            <div className="mt-3">
+              <div className="mb-1 flex justify-between text-xs font-black text-[#60786a]">
+                <span>练习表现</span>
+                <span>{accuracy}%</span>
+              </div>
+              <ProgressBar value={accuracy} />
+            </div>
+          ) : null}
         </div>
       </div>
 

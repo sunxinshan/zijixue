@@ -5,98 +5,95 @@ import { useMemo } from "react";
 
 import { ForestBackdrop } from "@/components/shared/ForestBackdrop";
 import { ProgressBar } from "@/components/shared/ProgressBar";
-import { getCorrectRate } from "@/lib/game";
+import {
+  calculateStars,
+  getAttemptStats,
+  getSessionAttempts,
+  getSessionXp,
+  getSubtopicStats,
+} from "@/lib/game";
 import { getMasteryMeta } from "@/lib/mastery";
 import { useAppStorage } from "@/lib/use-app-storage";
-import type {
-  ContentSection,
-  KnowledgeMastery,
-  KnowledgePoint,
-  Question,
-} from "@/types/content";
+import type { Knowledge } from "@/types/agent";
 
 export function ResultView({
-  challengeId,
-  section,
-  knowledgePoints,
-  questions,
+  sessionId,
+  knowledge,
 }: {
-  challengeId: string;
-  section: ContentSection;
-  knowledgePoints: KnowledgePoint[];
-  questions: Question[];
+  sessionId: string;
+  knowledge: Knowledge;
 }) {
   const storage = useAppStorage();
 
   const view = useMemo(() => {
-    const challenge = storage.challenges.find(
-      (item) => item.id === challengeId,
-    );
-    if (!challenge) {
+    const session = storage.sessions.find((item) => item.id === sessionId);
+    if (!session || !session.sessionSummary) {
       return {
-        challenge: null,
-        wrongQuestions: [] as Question[],
-        mastery: {} as Record<string, KnowledgeMastery>,
-        masteryAverage: 0,
+        session: null,
+        attempts: [],
+        stats: null,
+        subtopicStats: [],
+        wrongQuestions: [],
+        xp: 0,
       };
     }
 
-    const challengeAttempts = storage.attempts.filter(
-      (attempt) =>
-        challenge.questionIds.includes(attempt.questionId) &&
-        attempt.createdAt >= challenge.startedAt &&
-        (!challenge.completedAt || attempt.createdAt <= challenge.completedAt),
+    const attempts = getSessionAttempts(storage, sessionId);
+    const stats = getAttemptStats(attempts);
+    const questionById = new Map(
+      storage.questions.map((question) => [question.id, question]),
     );
-    const wrongQuestionIds = Array.from(
+    const wrongQuestions = Array.from(
       new Set(
-        challengeAttempts
-          .filter((attempt) => !attempt.isCorrect)
+        attempts
+          .filter((attempt) => !attempt.correct)
           .map((attempt) => attempt.questionId),
       ),
-    );
+    )
+      .map((questionId) => questionById.get(questionId))
+      .filter((question) => Boolean(question));
 
     return {
-      challenge,
-      wrongQuestions: wrongQuestionIds
-        .map((questionId) => questions.find((question) => question.id === questionId))
-        .filter((question): question is Question => Boolean(question)),
-      mastery: storage.mastery,
-      masteryAverage: Math.round(
-        knowledgePoints.reduce(
-          (sum, point) => sum + (storage.mastery[point.id]?.mastery ?? 0),
-          0,
-        ) / Math.max(1, knowledgePoints.length),
-      ),
+      session,
+      attempts,
+      stats,
+      subtopicStats: getSubtopicStats(storage, knowledge),
+      wrongQuestions,
+      xp: getSessionXp(storage, sessionId),
     };
-  }, [challengeId, knowledgePoints, questions, storage]);
+  }, [knowledge, sessionId, storage]);
 
-  if (!view.challenge) {
+  if (!view.session || !view.stats || !view.session.sessionSummary) {
     return (
       <ForestBackdrop compact>
         <div className="mx-auto flex min-h-[70vh] max-w-xl flex-col items-center justify-center rounded-[2rem] bg-white/90 p-8 text-center shadow-sm">
           <span className="text-5xl">🍃</span>
           <h1 className="mt-4 text-2xl font-black text-[#173f2a]">
-            没有找到这次挑战
+            没有找到这个 Session
           </h1>
           <p className="mt-2 text-sm font-semibold text-[#74887b]">
-            学习记录可能已被清除，可以重新开始一轮。
+            学习记录可能已被清除，可以重新开始 Agent 教学。
           </p>
           <Link
-            href={`/game/${section.id}`}
+            href={`/game/${knowledge.id}`}
             className="mt-6 rounded-2xl bg-[#2d995b] px-6 py-4 font-black text-white"
           >
-            重新挑战
+            重新开始
           </Link>
         </div>
       </ForestBackdrop>
     );
   }
 
-  const challenge = view.challenge;
-  const accuracy = getCorrectRate(
-    challenge.correctAnswers,
-    challenge.totalQuestions,
-  );
+  const summary = view.session.sessionSummary;
+  const masteryMeta = getMasteryMeta(summary.mastery);
+  const stars = calculateStars(view.stats.correct, view.stats.total);
+  const focusTitles = summary.recommendedFocus
+    .map(
+      (id) =>
+        knowledge.subtopics.find((subtopic) => subtopic.id === id)?.title,
+    )
+    .filter((title): title is string => Boolean(title));
 
   return (
     <ForestBackdrop compact>
@@ -109,26 +106,26 @@ export function ResultView({
             🦋
           </div>
           <p className="text-sm font-black tracking-wide text-white/80">
-            挑战完成
+            Agent Session 完成
           </p>
           <h1 className="mt-2 text-3xl font-black sm:text-4xl">
             🎉 森林探险成功！
           </h1>
-          <div className="mt-5 text-4xl tracking-[0.2em]" aria-label={`${challenge.stars} 颗星`}>
-            {"⭐".repeat(challenge.stars)}
+          <div className="mt-5 text-4xl tracking-[0.2em]" aria-label={`${stars} 颗星`}>
+            {"⭐".repeat(stars)}
           </div>
           <div className="mx-auto mt-6 grid max-w-xl grid-cols-3 gap-3">
             <div className="rounded-2xl bg-white/15 p-3">
-              <p className="text-2xl font-black">{accuracy}%</p>
+              <p className="text-2xl font-black">{view.stats.accuracy}%</p>
               <p className="text-xs font-bold text-white/75">正确率</p>
             </div>
             <div className="rounded-2xl bg-white/15 p-3">
-              <p className="text-2xl font-black">+{challenge.earnedXp}</p>
+              <p className="text-2xl font-black">+{view.xp}</p>
               <p className="text-xs font-bold text-white/75">XP</p>
             </div>
             <div className="rounded-2xl bg-white/15 p-3">
               <p className="text-2xl font-black">
-                {challenge.correctAnswers}/{challenge.totalQuestions}
+                {view.stats.correct}/{view.stats.total}
               </p>
               <p className="text-xs font-bold text-white/75">答对题数</p>
             </div>
@@ -136,67 +133,109 @@ export function ResultView({
         </section>
 
         <section className="mt-5 rounded-[2rem] bg-white/92 p-5 shadow-sm ring-1 ring-white sm:p-6">
-          <div className="flex items-end justify-between gap-4">
+          <div className="flex items-start justify-between gap-4">
             <div>
-              <h2 className="text-xl font-black text-[#173f2a]">知识掌握度</h2>
-              <p className="text-sm font-semibold text-[#74887b]">
-                本机平均掌握度 {view.masteryAverage}%
+              <p className="text-sm font-black text-[#74887b]">
+                Agent 综合判断
               </p>
+              <h2 className="mt-1 text-2xl font-black text-[#173f2a]">
+                {masteryMeta.icon} 掌握度 {summary.mastery}%
+              </h2>
             </div>
-            <span className="text-2xl">🌳</span>
+            <span className="text-3xl">🌳</span>
           </div>
+          <div className="mt-4">
+            <ProgressBar value={summary.mastery} />
+          </div>
+          <p className="mt-4 text-sm font-semibold leading-7 text-[#60786a]">
+            {summary.summary}
+          </p>
+        </section>
+
+        <section className="mt-5 grid gap-3 sm:grid-cols-2">
+          <div className="rounded-[1.75rem] bg-white/92 p-5 shadow-sm ring-1 ring-white">
+            <h2 className="font-black text-[#277146]">已经掌握</h2>
+            {summary.strengths.length > 0 ? (
+              <ul className="mt-3 space-y-2 text-sm font-bold text-[#4f7a5e]">
+                {summary.strengths.map((strength) => (
+                  <li key={strength}>🌿 {strength}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm font-semibold text-[#74887b]">
+                Agent 还没有发现稳定的强项。
+              </p>
+            )}
+          </div>
+          <div className="rounded-[1.75rem] bg-white/92 p-5 shadow-sm ring-1 ring-white">
+            <h2 className="font-black text-[#a16a16]">下一步重点</h2>
+            {focusTitles.length > 0 ? (
+              <ul className="mt-3 space-y-2 text-sm font-bold text-[#8a5a00]">
+                {focusTitles.map((title) => (
+                  <li key={title}>🌱 {title}</li>
+                ))}
+              </ul>
+            ) : (
+              <p className="mt-3 text-sm font-semibold text-[#74887b]">
+                暂时没有额外的重点建议。
+              </p>
+            )}
+          </div>
+        </section>
+
+        <section className="mt-5 rounded-[2rem] bg-white/92 p-5 shadow-sm ring-1 ring-white sm:p-6">
+          <h2 className="text-xl font-black text-[#173f2a]">Subtopic 表现</h2>
           <div className="mt-5 space-y-4">
-            {knowledgePoints.map((point) => {
-              const mastery = view.mastery[point.id]?.mastery ?? 0;
-              const meta = getMasteryMeta(mastery);
-              return (
-                <div key={point.id}>
-                  <div className="mb-1 flex items-center justify-between text-sm font-black text-[#315341]">
-                    <span>
-                      {meta.icon} {point.title}
-                    </span>
-                    <span>{mastery}%</span>
-                  </div>
-                  <ProgressBar value={mastery} />
+            {view.subtopicStats.map((stat) => (
+              <div key={stat.subtopicId}>
+                <div className="mb-1 flex items-center justify-between text-sm font-black text-[#315341]">
+                  <span>{stat.title}</span>
+                  <span>{stat.total > 0 ? `${stat.accuracy}%` : "未练习"}</span>
                 </div>
-              );
-            })}
+                <ProgressBar value={stat.accuracy} />
+              </div>
+            ))}
           </div>
         </section>
 
         <section className="mt-5 rounded-[2rem] bg-white/92 p-5 shadow-sm ring-1 ring-white sm:p-6">
           <h2 className="text-xl font-black text-[#173f2a]">
-            {view.wrongQuestions.length > 0 ? "本次需要复习" : "全部答对啦"}
+            {view.wrongQuestions.length > 0 ? "本次需要复习" : "本 Session 全部答对"}
           </h2>
           {view.wrongQuestions.length > 0 ? (
             <div className="mt-4 space-y-3">
               {view.wrongQuestions.map((question) => (
                 <div
-                  key={question.id}
+                  key={question?.id}
                   className="rounded-2xl bg-[#fff8ed] p-4 ring-1 ring-[#f4dfb9]"
                 >
                   <p className="text-sm font-black text-[#765221]">
-                    {question.prompt}
+                    {question?.question}
                   </p>
                   <p className="mt-1 text-sm font-bold text-[#2f754d]">
-                    正确答案：{Array.isArray(question.answer) ? question.answer.join(" / ") : question.answer}
+                    正确答案：
+                    {typeof question?.answer === "boolean"
+                      ? question.answer
+                        ? "正确"
+                        : "错误"
+                      : question?.answer}
                   </p>
                 </div>
               ))}
             </div>
           ) : (
             <p className="mt-3 rounded-2xl bg-[#effbf0] p-4 text-sm font-bold text-[#277146]">
-              这一轮没有错题，知识树叶又长大了一圈。
+              Agent 记录的 Attempt 全部正确。
             </p>
           )}
         </section>
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <Link
-            href={`/game/${section.id}`}
+            href={`/game/${knowledge.id}`}
             className="flex min-h-14 items-center justify-center rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-6 font-black text-white shadow-lg transition hover:-translate-y-0.5"
           >
-            再练一次
+            开始新 Session
           </Link>
           <Link
             href="/"

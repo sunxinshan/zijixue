@@ -6,47 +6,21 @@ import { useMemo } from "react";
 import { KnowledgeCard } from "@/components/knowledge/KnowledgeCard";
 import { ForestBackdrop } from "@/components/shared/ForestBackdrop";
 import { ProgressBar } from "@/components/shared/ProgressBar";
-import type { ContentSection, KnowledgePoint } from "@/types/content";
-import { getAverageMastery, getMasteryMeta } from "@/lib/mastery";
+import { getSubtopicStats } from "@/lib/game";
+import { getMasteryMeta } from "@/lib/mastery";
+import { getLearningState } from "@/lib/storage";
 import { useAppStorage } from "@/lib/use-app-storage";
+import type { Knowledge } from "@/types/agent";
 
-export function KnowledgeView({
-  section,
-  knowledgePoints,
-}: {
-  section: ContentSection;
-  knowledgePoints: KnowledgePoint[];
-}) {
+export function KnowledgeView({ knowledge }: { knowledge: Knowledge }) {
   const storage = useAppStorage();
-  const mastery = useMemo(
-    () =>
-      Object.fromEntries(
-        knowledgePoints.map((point) => [
-          point.id,
-          storage.mastery[point.id]?.mastery ?? 0,
-        ]),
-      ),
-    [knowledgePoints, storage.mastery],
+  const learningState = getLearningState(storage, knowledge.id);
+  const mastery = learningState?.mastery ?? 0;
+  const meta = getMasteryMeta(mastery);
+  const subtopicStats = useMemo(
+    () => getSubtopicStats(storage, knowledge),
+    [knowledge, storage],
   );
-
-  const average = useMemo(() => {
-    const masteryRecords = Object.fromEntries(
-      Object.entries(mastery).map(([id, value]) => [
-        id,
-        {
-          knowledgePointId: id,
-          mastery: value,
-          correctCount: 0,
-          wrongCount: 0,
-          streak: 0,
-        },
-      ]),
-    );
-    return getAverageMastery(
-      masteryRecords,
-      knowledgePoints.map((point) => point.id),
-    );
-  }, [knowledgePoints, mastery]);
 
   const speak = (word: string) => {
     if (typeof window === "undefined" || !("speechSynthesis" in window)) return;
@@ -67,51 +41,56 @@ export function KnowledgeView({
           ← 返回森林
         </Link>
         <div className="rounded-2xl bg-white/85 px-4 py-2 text-right shadow-sm">
-          <p className="text-xs font-bold text-[#74887b]">当前掌握度</p>
-          <p className="font-black text-[#277146]">{average}%</p>
+          <p className="text-xs font-bold text-[#74887b]">Agent 掌握度</p>
+          <p className="font-black text-[#277146]">
+            {meta.icon} {mastery}%
+          </p>
         </div>
       </header>
 
       <main className="mt-6">
         <section className="rounded-[2rem] bg-[#1f7148] p-6 text-white shadow-[0_18px_50px_rgba(31,113,72,0.2)]">
           <span className="text-4xl">🐉</span>
-          <h1 className="mt-3 text-3xl font-black sm:text-4xl">{section.title}</h1>
+          <h1 className="mt-3 text-3xl font-black sm:text-4xl">
+            {knowledge.title}
+          </h1>
           <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-white/80 sm:text-base">
-            看一遍变化方法，点击单词可以听发音。准备好了，就进入 10 题挑战。
+            {learningState?.summary ?? knowledge.description}
           </p>
           <div className="mt-5 max-w-sm">
-            <ProgressBar value={average} label="知识森林成长值" tone="yellow" />
+            <ProgressBar value={mastery} label="长期 LearningState" tone="yellow" />
           </div>
         </section>
 
         <section className="mt-6 grid gap-4 lg:grid-cols-2">
-          {knowledgePoints.map((point, index) => {
-            const pointMastery = mastery[point.id] ?? 0;
-            const meta = getMasteryMeta(pointMastery);
+          {knowledge.subtopics.map((subtopic, index) => {
+            const rule = knowledge.rules.find(
+              (item) => item.subtopicId === subtopic.id,
+            );
+            const stats = subtopicStats.find(
+              (item) => item.subtopicId === subtopic.id,
+            );
+
             return (
-              <div key={point.id} className="space-y-2">
-                <div className="flex items-center justify-between px-2 text-xs font-black text-[#60786a]">
-                  <span>
-                    {meta.icon} {meta.label}
-                  </span>
-                  <span>{pointMastery}%</span>
-                </div>
-                <KnowledgeCard
-                  point={point}
-                  index={index}
-                  onPronounce={speak}
-                />
-              </div>
+              <KnowledgeCard
+                key={subtopic.id}
+                subtopic={subtopic}
+                rule={rule}
+                index={index}
+                accuracy={stats?.accuracy}
+                totalAttempts={stats?.total}
+                onPronounce={speak}
+              />
             );
           })}
         </section>
 
         <div className="sticky bottom-4 z-10 mt-6 rounded-[1.5rem] border border-white bg-white/90 p-3 shadow-[0_16px_40px_rgba(47,108,66,0.16)] backdrop-blur">
           <Link
-            href={`/game/${section.id}`}
+            href={`/game/${knowledge.id}`}
             className="flex min-h-14 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-6 text-base font-black text-white shadow-lg transition hover:-translate-y-0.5"
           >
-            开始 10 题挑战
+            开始 Agent 教学
             <span className="ml-2" aria-hidden="true">
               →
             </span>

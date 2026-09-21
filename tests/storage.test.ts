@@ -1,23 +1,40 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildChallengeRecord, getChallengeSummary } from "@/lib/storage";
+import {
+  createInitialAgentStorage,
+  migrateLegacyStorage,
+} from "@/lib/storage";
 
-test("挑战记录包含答题 XP 和完成奖励", () => {
-  const challenge = buildChallengeRecord({
-    id: "challenge-test",
-    questionIds: ["q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10"],
-    knowledgePointIds: ["comparative-basic"],
-    correctAnswers: 10,
-    questionXp: 118,
-    stars: 3,
-    startedAt: "2026-09-20T00:00:00.000Z",
-    completedAt: "2026-09-20T00:05:00.000Z",
-  });
+test("v2 Storage 使用 LearningState、Session、Attempt、Question 四类数据", () => {
+  const storage = createInitialAgentStorage();
+  assert.deepEqual(Object.keys(storage).sort(), [
+    "attempts",
+    "learningStates",
+    "questions",
+    "sessions",
+    "userId",
+    "version",
+  ]);
+});
 
-  assert.equal(challenge.earnedXp, 168);
-  assert.deepEqual(getChallengeSummary(challenge), {
-    accuracy: 100,
-    completionBonus: 50,
-  });
+test("旧版 mastery、XP 和星星可迁移到 LearningState v2", () => {
+  const migrated = migrateLegacyStorage(
+    JSON.stringify({
+      player: { xp: 198, totalStars: 3 },
+      mastery: {
+        "comparative-basic": { knowledgePointId: "comparative-basic", mastery: 20 },
+        "comparative-y-ending": {
+          knowledgePointId: "comparative-y-ending",
+          mastery: 40,
+        },
+      },
+    }),
+  );
+
+  assert.ok(migrated);
+  assert.equal(migrated.legacyXp, 198);
+  assert.equal(migrated.legacyStars, 3);
+  assert.equal(migrated.learningStates[0].knowledgeId, "comparative");
+  assert.equal(migrated.learningStates[0].mastery, 30);
 });

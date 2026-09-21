@@ -1,88 +1,143 @@
-import { calculateCompletionBonus, getCorrectRate, getLevelFromXp } from "@/lib/game";
-import { applyAttemptToMastery, createKnowledgeMastery } from "@/lib/mastery";
 import type {
   AppStorage,
   Attempt,
-  ChallengeRecord,
-  PlayerProfile,
-} from "@/types/content";
+  LearningSession,
+  LearningState,
+  Question,
+  SessionSummary,
+} from "@/types/agent";
 
-export const STORAGE_KEY = "english-forest:v1";
+export const STORAGE_KEY = "english-forest";
+export const LEGACY_STORAGE_KEY = "english-forest:v1";
 export const STORAGE_CHANGE_EVENT = "english-forest:storage-change";
 
-const serverStorageSnapshot = createInitialAppStorage();
+interface LegacyMastery {
+  knowledgePointId: string;
+  mastery: number;
+}
+
+interface LegacyStorage {
+  player?: {
+    xp?: number;
+    totalStars?: number;
+  };
+  mastery?: Record<string, LegacyMastery>;
+  attempts?: unknown[];
+  challenges?: unknown[];
+}
+
+const serverStorageSnapshot = createInitialAgentStorage();
 let cachedRawStorage: string | null | undefined;
 let cachedStorage: AppStorage | null = null;
 
-function createId(prefix: string): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `${prefix}-${crypto.randomUUID()}`;
-  }
-  return `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-export function createInitialPlayer(now = new Date().toISOString()): PlayerProfile {
+export function createInitialAgentStorage(): AppStorage {
   return {
-    id: createId("player"),
-    level: 1,
-    xp: 0,
-    totalStars: 0,
-    createdAt: now,
-    updatedAt: now,
-  };
-}
-
-export function createInitialAppStorage(): AppStorage {
-  const player = createInitialPlayer();
-  return {
-    player,
-    mastery: {},
+    version: 2,
+    userId: "local-user",
+    learningStates: [],
+    sessions: [],
     attempts: [],
-    challenges: [],
+    questions: [],
   };
 }
 
-function parseAppStorage(raw: string | null): AppStorage {
-  const fallback = createInitialAppStorage();
-  if (!raw) return fallback;
+export function migrateLegacyStorage(raw: string): AppStorage | null {
+  try {
+    const legacy = JSON.parse(raw) as LegacyStorage;
+    const masteryValues = Object.values(legacy.mastery ?? {}).map(
+      (item) => item.mastery,
+    );
+    const averageMastery =
+      masteryValues.length > 0
+        ? Math.round(
+            masteryValues.reduce((total, value) => total + value, 0) /
+              masteryValues.length,
+          )
+        : 0;
+
+    return {
+      ...createInitialAgentStorage(),
+      learningStates:
+        masteryValues.length > 0
+          ? [
+              {
+                userId: "local-user",
+                knowledgeId: "comparative",
+                mastery: averageMastery,
+                strengths: [],
+                weaknesses: [],
+                currentDifficulty: 1,
+                recommendedFocus: [],
+                summary: "由旧版固定掌握度迁移，下一次 Agent Session 会重新评估。",
+                updatedAt: Date.now(),
+              },
+            ]
+          : [],
+      legacyXp: legacy.player?.xp ?? 0,
+      legacyStars: legacy.player?.totalStars ?? 0,
+    };
+  } catch {
+    return null;
+  }
+}
+
+function parseAgentStorage(raw: string | null): AppStorage {
+  if (!raw) return createInitialAgentStorage();
 
   try {
     const parsed = JSON.parse(raw) as Partial<AppStorage>;
+    if (parsed.version !== 2) {
+      throw new Error("unsupported storage version");
+    }
+
     return {
-      player: {
-        ...fallback.player,
-        ...(parsed.player ?? {}),
-      },
-      mastery:
-        parsed.mastery && typeof parsed.mastery === "object"
-          ? parsed.mastery
-          : {},
+      version: 2,
+      userId: parsed.userId ?? "local-user",
+      learningStates: Array.isArray(parsed.learningStates)
+        ? parsed.learningStates
+        : [],
+      sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
       attempts: Array.isArray(parsed.attempts) ? parsed.attempts : [],
-      challenges: Array.isArray(parsed.challenges) ? parsed.challenges : [],
+      questions: Array.isArray(parsed.questions) ? parsed.questions : [],
+      legacyXp: parsed.legacyXp,
+      legacyStars: parsed.legacyStars,
     };
   } catch {
-    return fallback;
+    return createInitialAgentStorage();
   }
 }
 
-export function getServerAppStorageSnapshot(): AppStorage {
-  return serverStorageSnapshot;
-}
-
-export function getAppStorageSnapshot(): AppStorage {
+export function getAgentStorageSnapshot(): AppStorage {
   if (typeof window === "undefined") return serverStorageSnapshot;
 
   const raw = window.localStorage.getItem(STORAGE_KEY);
-  if (raw === cachedRawStorage && cachedStorage) {
+  if (raw === cachedRawStorage && cachedStorage) return cachedStorage;
+
+  if (raw) {
+    cachedRawStorage = raw;
+    cachedStorage = parseAgentStorage(raw);
     return cachedStorage;
   }
 
+  const legacyRaw = window.localStorage.getItem(LEGACY_STORAGE_KEY);
+  const migrated = legacyRaw ? migrateLegacyStorage(legacyRaw) : null;
   cachedRawStorage = raw;
-  cachedStorage = parseAppStorage(raw);
+  cachedStorage = migrated ?? createInitialAgentStorage();
+
+  if (migrated) {
+    const migratedRaw = JSON.stringify(migrated);
+    window.localStorage.setItem(STORAGE_KEY, migratedRaw);
+    cachedRawStorage = migratedRaw;
+  }
+
   return cachedStorage;
 }
 
-export function subscribeToAppStorage(onStoreChange: () => void): () => void {
+export function getServerAgentStorageSnapshot(): AppStorage {
+  return serverStorageSnapshot;
+}
+
+export function subscribeToAgentStorage(onStoreChange: () => void): () => void {
   if (typeof window === "undefined") return () => undefined;
 
   const handleStorage = (event: StorageEvent) => {
@@ -98,11 +153,11 @@ export function subscribeToAppStorage(onStoreChange: () => void): () => void {
   };
 }
 
-export function loadAppStorage(): AppStorage {
-  return getAppStorageSnapshot();
+export function loadAgentStorage(): AppStorage {
+  return getAgentStorageSnapshot();
 }
 
-export function saveAppStorage(storage: AppStorage): void {
+export function saveAgentStorage(storage: AppStorage): void {
   if (typeof window === "undefined") return;
 
   const raw = JSON.stringify(storage);
@@ -112,85 +167,90 @@ export function saveAppStorage(storage: AppStorage): void {
   window.dispatchEvent(new Event(STORAGE_CHANGE_EVENT));
 }
 
-export interface CompleteChallengeInput {
-  challenge: ChallengeRecord;
-  attempts: Attempt[];
+export function getLearningState(
+  storage: AppStorage,
+  knowledgeId: string,
+): LearningState | undefined {
+  return storage.learningStates.find((state) => state.knowledgeId === knowledgeId);
 }
 
-export function completeChallenge({
-  challenge,
-  attempts,
-}: CompleteChallengeInput): AppStorage {
-  const current = loadAppStorage();
-  const existingChallenge = current.challenges.find(
-    (item) => item.id === challenge.id,
-  );
-
-  if (existingChallenge) return current;
-
-  const nextMastery = { ...current.mastery };
-
-  for (const attempt of attempts) {
-    for (const knowledgePointId of attempt.knowledgePointIds) {
-      nextMastery[knowledgePointId] = applyAttemptToMastery(
-        nextMastery[knowledgePointId] ?? createKnowledgeMastery(knowledgePointId),
-        knowledgePointId,
-        attempt.isCorrect,
-        attempt.createdAt,
-      );
-    }
-  }
-
-  const xp = current.player.xp + challenge.earnedXp;
-  const completedAt = challenge.completedAt ?? new Date().toISOString();
-  const completedChallenge: ChallengeRecord = {
-    ...challenge,
-    completedAt,
+export function upsertLearningState(state: LearningState): AppStorage {
+  const current = loadAgentStorage();
+  const next = {
+    ...current,
+    learningStates: [
+      ...current.learningStates.filter(
+        (item) => item.knowledgeId !== state.knowledgeId,
+      ),
+      state,
+    ],
   };
-
-  const nextStorage: AppStorage = {
-    player: {
-      ...current.player,
-      level: getLevelFromXp(xp),
-      xp,
-      totalStars: current.player.totalStars + challenge.stars,
-      updatedAt: completedAt,
-    },
-    mastery: nextMastery,
-    attempts: [...current.attempts, ...attempts],
-    challenges: [...current.challenges, completedChallenge],
-  };
-
-  saveAppStorage(nextStorage);
-  return nextStorage;
+  saveAgentStorage(next);
+  return next;
 }
 
-export function buildChallengeRecord(input: {
-  id: string;
-  questionIds: string[];
-  knowledgePointIds: string[];
-  correctAnswers: number;
-  questionXp: number;
-  stars: 1 | 2 | 3;
-  startedAt: string;
-  completedAt: string;
-}): ChallengeRecord {
-  return {
-    id: input.id,
-    knowledgePointIds: input.knowledgePointIds,
-    questionIds: input.questionIds,
-    totalQuestions: input.questionIds.length,
-    correctAnswers: input.correctAnswers,
-    earnedXp: input.questionXp + calculateCompletionBonus(input.stars),
-    stars: input.stars,
-    startedAt: input.startedAt,
-    completedAt: input.completedAt,
+export function upsertSession(session: LearningSession): AppStorage {
+  const current = loadAgentStorage();
+  const next = {
+    ...current,
+    sessions: [
+      ...current.sessions.filter((item) => item.id !== session.id),
+      session,
+    ],
   };
+  saveAgentStorage(next);
+  return next;
 }
 
-export function getChallengeSummary(challenge: ChallengeRecord) {
-  return {
-    accuracy: getCorrectRate(challenge.correctAnswers, challenge.totalQuestions),
-    completionBonus: calculateCompletionBonus(challenge.stars),
+export function saveQuestions(questions: Question[]): AppStorage {
+  const current = loadAgentStorage();
+  const byId = new Map(current.questions.map((question) => [question.id, question]));
+  for (const question of questions) byId.set(question.id, question);
+
+  const next = {
+    ...current,
+    questions: Array.from(byId.values()).slice(-500),
   };
+  saveAgentStorage(next);
+  return next;
+}
+
+export function recordAttempt(attempt: Attempt): AppStorage {
+  const current = loadAgentStorage();
+  const next = {
+    ...current,
+    attempts: [...current.attempts, attempt],
+  };
+  saveAgentStorage(next);
+  return next;
+}
+
+export function completeSession(
+  sessionId: string,
+  summary: SessionSummary,
+  learningState: LearningState,
+): AppStorage {
+  const current = loadAgentStorage();
+  const completedAt = Date.now();
+  const next = {
+    ...current,
+    learningStates: [
+      ...current.learningStates.filter(
+        (state) => state.knowledgeId !== learningState.knowledgeId,
+      ),
+      learningState,
+    ],
+    sessions: current.sessions.map((session) =>
+      session.id === sessionId
+        ? {
+            ...session,
+            status: "completed" as const,
+            endedAt: completedAt,
+            sessionSummary: summary,
+          }
+        : session,
+    ),
+  };
+  saveAgentStorage(next);
+  return next;
 }

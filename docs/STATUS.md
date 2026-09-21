@@ -35,18 +35,21 @@ Agent 分析
 MVP：
 
 ```text
-Next.js
-React
+Next.js 16
+React 19
 TypeScript
-Tailwind CSS
+Tailwind CSS 4
 LangGraph
-LLM
+LangChain Core / OpenAI
+Zod
 LocalStorage
 ```
 
 暂时不使用：
+
 - SQLite
 - PostgreSQL
+- MySQL
 - 用户登录系统
 
 ## 3. 项目文档
@@ -62,211 +65,153 @@ docs/
 └── STATUS.md
 ```
 
-文档优先级：
-
-```text
-当前 Codex Prompt
-    ↓
-AGENT.md
-    ↓
-DATA.md
-    ↓
-STATUS.md
-    ↓
-PRD.md
-    ↓
-DESIGN.md
-    ↓
-CONTENT.md
-    ↓
-TECH.md
-```
-
 ## 4. 当前架构
 
-```text
-Knowledge = Level
-```
+- `Comparative` 是唯一 Knowledge / Level。
+- `regular`、`e-ending`、`y-ending`、`double-consonant`、`irregular` 是 subtopic。
+- 每次进入 Game 页面会创建新的 LearningSession。
+- 新 Session 使用新的 Agent Context，只读取对应 Knowledge 的 LearningState。
+- 固定 Question Selector 已移除。
+- 固定 mastery 加减公式已移除。
 
-Knowledge 内部可以有多个 subtopic。
+## 5. Agent 流程
 
-## 5. Agent 架构
+LangGraph 当前分为两阶段，以 HTTP 边界表示 `WAIT_FOR_USER`：
 
-核心原则：
-
-> 程序负责边界，Agent 负责教学。
-
-程序负责：
-- Knowledge
-- Session
-- Attempt
-- 答案判断
-- 数据保存
-- Agent 输出验证
-
-Agent 负责：
-- 学习状态分析
-- 薄弱点判断
-- 题目生成
-- 难度调整
-- 下一批训练策略
-- Session 总结
-
-## 6. Question Strategy
-
-MVP 每次生成 10 道题。
-
-只支持：
-- choice
-- true-false
-
-不支持：
-- sentence
-- translation
-- open-ended
-
-学生回答后程序本地判断，不调用 LLM 判分。
-
-## 7. Learning Strategy
-
-不采用固定 mastery 公式。
-
-程序记录：
-
-```text
-question
-answer
-correct
-difficulty
-subtopic
-timestamp
-```
-
-Agent 综合分析学习情况。
-
-## 8. 当前开发阶段
-
-当前处于：
-
-```text
-Agent Architecture Refactor
-```
-
-目标是把现有固定题库练习架构升级为 Agent 驱动的动态教学架构。
-
-## 9. 第一阶段任务
-
-必须完成：
-
-### Agent 基础结构
-建立 Agent / Graph / State / Prompt / LLM / Validator 等合理模块。
-
-### LangGraph
-建立：
+启动阶段：
 
 ```text
 START
- ↓
-load_context
- ↓
-generate_batch
- ↓
-等待学生
- ↓
-记录答案
- ↓
-分析 Batch
- ↓
-continue / finish
- ↓
-generate_batch / summarize_session
- ↓
-save_learning_state
- ↓
-END
+→ load_context
+→ generate_batch
+→ END
 ```
 
-### LLM Provider
-支持 Provider 和 Model 配置，不写死具体模型。
-
-### Question Batch
-一次生成 10 道 choice / true-false 题。
-
-### Question Validator
-检查数量、题型、答案、Knowledge 边界、difficulty、重复题等。
-
-### Attempt
-每道题回答后记录 Attempt，包括正确和错误。
-
-### Batch Analysis
-10 道完成后 Agent 分析并输出 continue / finish、focus、difficulty、reason。
-
-### SessionSummary
-finish 后生成 mastery、strengths、weaknesses、recommendedFocus、summary。
-
-### LearningState
-SessionSummary 更新长期 LearningState，并保存到 LocalStorage。
-
-## 10. UI 原则
-
-不要大规模修改 UI。
-
-优先保持：
-- 已有页面
-- 已有视觉风格
-- 已有组件
-- 已有游戏化交互
-
-只修改实现 Agent 流程所必需的部分。
-
-## 11. 完成标准
-
-真正跑通：
+一批答题完成后：
 
 ```text
-进入 Knowledge
-      ↓
-创建 Session
-      ↓
-读取 LearningState
-      ↓
-Agent 生成 10 道题
-      ↓
-学生逐题回答
-      ↓
-程序本地判断
-      ↓
-记录 10 个 Attempt
-      ↓
-Agent 分析
-      ↓
-continue / finish
-      ↓
-continue → 再生成 10 道针对性题目
-      ↓
-finish → SessionSummary
-      ↓
-更新 LearningState
-      ↓
-Session 结束
+START
+→ record_attempt
+→ analyze_batch
+→ continue ? generate_next_batch
+           : summarize_session
+             → save_learning_state
+→ END
 ```
 
-## 12. Codex 工作要求
+程序在浏览器本地逐题判分，并在每道题回答后记录 Attempt。
+只有每批 10 道题完成后才调用一次 Agent 分析。
 
-每次修改前：
-1. 阅读所有 docs。
-2. 阅读现有代码。
-3. 不要假设旧架构仍然正确。
-4. 不要删除已有功能，除非确认已经被新架构取代。
-5. 优先复用已有类型和组件。
-6. 避免无必要的大规模重构。
+## 6. LLM Provider
 
-完成后：
-- 更新 STATUS.md
-- 列出修改文件
-- 说明架构变化
-- 说明测试结果
-- 说明剩余问题
-- 说明下一步
+已实现：
 
-不要虚构测试结果。
+```ts
+interface LLMProvider {
+  generate<T>(
+    prompt: string,
+    schema: z.ZodType<T>,
+    context?: unknown
+  ): Promise<T>;
+}
+```
+
+支持：
+
+- `mock`：默认本地演示 Provider，不需要 API Key。
+- `openai`：通过 `@langchain/openai` 调用，支持 `LLM_MODEL`、`LLM_API_KEY` 和可选 `LLM_BASE_URL`。
+
+OpenAI API Key 不会发送到浏览器。
+
+## 7. Question 和 Validation
+
+MVP 每批正好 10 道题，仅支持：
+
+- `choice`
+- `true-false`
+
+Validator 校验：
+
+- 数量必须为 10
+- 题型合法
+- choice 的 options 和 answer 合法
+- true-false 的 answer 为 boolean
+- knowledgeId 属于当前 Knowledge
+- knowledgeSubtopic 属于当前 Knowledge
+- difficulty 为 1 到 5
+- 题目 ID 和题干不重复
+
+## 8. 当前 Storage
+
+LocalStorage 统一 Key：
+
+```text
+english-forest
+```
+
+结构：
+
+```ts
+interface AppStorage {
+  version: 2;
+  userId: string;
+  learningStates: LearningState[];
+  sessions: LearningSession[];
+  attempts: Attempt[];
+  questions: Question[];
+}
+```
+
+旧版 `english-forest:v1` 的 mastery、XP 和星星会在首次读取时迁移。
+
+## 9. 当前完成状态
+
+已跑通：
+
+- Knowledge = Level
+- subtopic 数据模型
+- LearningSession
+- LangGraph 两阶段流程
+- 动态生成 10 道 choice / true-false
+- 程序本地判分
+- Attempt 逐题记录
+- Batch Analysis
+- continue 后生成下一批针对性题目
+- finish 后生成 SessionSummary
+- SessionSummary 更新 LearningState
+- LocalStorage 持久化和旧数据迁移
+- 原有森林主题 UI 保留
+
+当前默认 Provider：
+
+```text
+mock
+```
+
+因此线上或本地在没有环境变量时会使用可重复的本地教学 Provider。
+生产环境如要使用真实模型，需配置 `LLM_PROVIDER=openai` 以及对应模型和 Key。
+
+## 10. 测试状态
+
+当前自动化测试覆盖：
+
+- Knowledge / subtopic 数据
+- choice / true-false 本地判分
+- LearningState 更新
+- Mock Provider 题目生成
+- Question Validator
+- LangGraph start 流程
+- Batch continue 流程
+- Batch finish + SessionSummary 流程
+- Storage v2 初始结构
+- Legacy LocalStorage 迁移
+
+## 11. 下一阶段
+
+最合理的下一阶段任务是：
+
+1. 配置并验证真实 OpenAI Provider 的结构化输出稳定性。
+2. 增加 Agent 生成题目的离线 eval 数据集，评估题目正确性、难度和 subtopic 覆盖。
+3. 增加 active Session 恢复能力，刷新或关闭页面后可继续同一 Session。
+4. 为真实模型增加请求超时、降级和错误重试策略。
+5. 在真实模型稳定后，再评估是否需要数据库和跨设备 LearningState。

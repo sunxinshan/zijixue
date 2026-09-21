@@ -1,12 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { GameView } from "@/components/game/GameView";
-import {
-  comparativesKnowledgePoints,
-  comparativesQuestions,
-  comparativesSection,
-  comparativesSectionId,
-} from "@/data/content/comparatives";
+import { getKnowledge } from "@/data/knowledge/comparative";
 
 export default async function GamePage({
   params,
@@ -14,16 +9,9 @@ export default async function GamePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const knowledge = getKnowledge(id);
 
-  if (id !== comparativesSectionId) {
-    notFound();
-  }
+  if (!knowledge) notFound();
 
-  return (
-    <GameView
-      section={comparativesSection}
-      knowledgePoints={comparativesKnowledgePoints}
-      questions={comparativesQuestions}
-    />
-  );
+  return <GameView knowledge={knowledge} />;
 }

@@ -7,251 +7,359 @@ import { useEffect, useRef, useState } from "react";
 import { AnswerButton } from "@/components/game/AnswerButton";
 import { ForestBackdrop } from "@/components/shared/ForestBackdrop";
 import { ProgressBar } from "@/components/shared/ProgressBar";
+import { completeAgentBatch, startAgentSession } from "@/lib/agent/client";
 import {
-  QUESTIONS_PER_CHALLENGE,
-  calculateCurrentStreak,
-  calculateQuestionXp,
-  calculateStars,
-  createGameSession,
-  formatAnswer,
-  isAnswerCorrect,
+  createLocalId,
+  createTimestamp,
+  evaluateQuestionAnswer,
+  XP_PER_CORRECT,
 } from "@/lib/game";
-import { selectQuestions } from "@/lib/question-selector";
+import { createInitialLearningState } from "@/lib/mastery";
 import {
-  buildChallengeRecord,
-  completeChallenge,
-  loadAppStorage,
+  completeSession,
+  getLearningState,
+  loadAgentStorage,
+  recordAttempt,
+  saveQuestions,
+  upsertSession,
 } from "@/lib/storage";
 import type {
+  AgentDecision,
   Attempt,
-  ContentSection,
-  GameSession,
-  KnowledgePoint,
-  Question,
-} from "@/types/content";
+  Knowledge,
+  LearningSession,
+  LearningState,
+  QuestionBatch,
+} from "@/types/agent";
+
+type GameStatus =
+  | "loading"
+  | "question"
+  | "analyzing"
+  | "continue-ready"
+  | "error";
 
 interface FeedbackState {
-  isCorrect: boolean;
   selectedAnswer: string;
   correctAnswer: string;
-  explanation?: string;
+  isCorrect: boolean;
+  explanation: string;
   xpEarned: number;
 }
 
-const questionTypeLabels: Record<Question["type"], string> = {
+const questionTypeLabels = {
   choice: "选择题",
-  "fill-blank": "填空题",
-  "sentence-translation": "句子翻译",
-  ordering: "排序题",
-  listening: "听力题",
-};
+  "true-false": "判断题",
+} as const;
 
-function createAttemptId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `attempt-${crypto.randomUUID()}`;
-  }
-  return `attempt-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+function formatAnswer(answer: string | boolean): string {
+  if (typeof answer === "boolean") return answer ? "正确" : "错误";
+  return answer;
 }
 
-function createChallengeId() {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `challenge-${crypto.randomUUID()}`;
-  }
-  return `challenge-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-export function GameView({
-  section,
-  knowledgePoints,
-  questions,
-}: {
-  section: ContentSection;
-  knowledgePoints: KnowledgePoint[];
-  questions: Question[];
-}) {
+export function GameView({ knowledge }: { knowledge: Knowledge }) {
   const router = useRouter();
   const initialized = useRef(false);
-  const attemptsRef = useRef<Attempt[]>([]);
-  const startedAtRef = useRef("");
-  const [session, setSession] = useState<GameSession | null>(null);
-  const [currentAnswer, setCurrentAnswer] = useState("");
+  const [status, setStatus] = useState<GameStatus>("loading");
+  const [errorMessage, setErrorMessage] = useState("");
+  const [provider, setProvider] = useState("");
+  const [session, setSession] = useState<LearningSession | null>(null);
+  const [learningState, setLearningState] = useState<LearningState | null>(null);
+  const [currentBatch, setCurrentBatch] = useState<QuestionBatch | null>(null);
+  const [nextBatch, setNextBatch] = useState<QuestionBatch | null>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const [batchNumber, setBatchNumber] = useState(1);
+  const [attempts, setAttempts] = useState<Attempt[]>([]);
+  const [decisions, setDecisions] = useState<AgentDecision[]>([]);
+  const [previousQuestions, setPreviousQuestions] = useState<string[]>([]);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [continueReason, setContinueReason] = useState("");
 
   useEffect(() => {
-    if (initialized.current || questions.length === 0) return;
+    if (initialized.current) return;
     initialized.current = true;
 
-    const storage = loadAppStorage();
-    const selectedQuestions = selectQuestions(questions, {
-      count: QUESTIONS_PER_CHALLENGE,
-      mastery: storage.mastery,
-    });
-    const challengeId = createChallengeId();
-    startedAtRef.current = new Date().toISOString();
-    setSession(
-      createGameSession(
-        challengeId,
-        selectedQuestions.map((question) => question.id),
-      ),
-    );
-  }, [questions]);
+    async function initialize() {
+      try {
+        const storage = loadAgentStorage();
+        const currentLearningState =
+          getLearningState(storage, knowledge.id) ??
+          createInitialLearningState(storage.userId, knowledge.id);
+        const response = await startAgentSession({
+          userId: storage.userId,
+          knowledge,
+          learningState: currentLearningState,
+        });
 
-  const currentQuestion = session
-    ? questions.find(
-        (question) =>
-          question.id === session.questionIds[session.currentIndex],
-      )
-    : undefined;
+        upsertSession(response.session);
+        saveQuestions(response.batch.questions);
+        setProvider(response.provider);
+        setSession(response.session);
+        setLearningState(response.learningState);
+        setCurrentBatch(response.batch);
+        setPreviousQuestions(
+          response.batch.questions.map((question) => question.question),
+        );
+        setStatus("question");
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error ? error.message : "Agent 初始化失败",
+        );
+        setStatus("error");
+      }
+    }
 
-  const knowledgePoint =
-    currentQuestion && currentQuestion.knowledgePointIds.length > 0
-      ? knowledgePoints.find(
-          (point) => point.id === currentQuestion.knowledgePointIds[0],
-        )
-      : undefined;
+    void initialize();
+  }, [knowledge]);
 
-  const submitAnswer = (answerOverride?: string | string[]) => {
-    if (!session || !currentQuestion || feedback) return;
+  const currentQuestion = currentBatch?.questions[currentIndex];
 
-    const answer = answerOverride ?? currentAnswer;
-    const hasAnswer = Array.isArray(answer)
-      ? answer.some((value) => value.trim().length > 0)
-      : answer.trim().length > 0;
-    if (!hasAnswer) return;
+  const handleAnswer = (answer: string | boolean) => {
+    if (!session || !currentQuestion || !currentBatch || feedback) return;
 
-    const isCorrect = isAnswerCorrect(currentQuestion, answer);
-    const nextResults = {
-      ...session.results,
-      [currentQuestion.id]: isCorrect,
-    };
-    const streak = calculateCurrentStreak(
-      session.questionIds,
-      nextResults,
-      session.currentIndex,
-    );
-    const xpEarned = calculateQuestionXp(isCorrect, streak);
-    const createdAt = new Date().toISOString();
-    attemptsRef.current.push({
-      id: createAttemptId(),
+    const correct = evaluateQuestionAnswer(currentQuestion, answer);
+    const attempt: Attempt = {
+      id: createLocalId("attempt"),
+      sessionId: session.id,
+      knowledgeId: knowledge.id,
       questionId: currentQuestion.id,
-      knowledgePointIds: currentQuestion.knowledgePointIds,
       answer,
-      isCorrect,
-      createdAt,
-    });
+      correct,
+      timestamp: createTimestamp(),
+    };
 
-    setSession({
-      ...session,
-      answers: {
-        ...session.answers,
-        [currentQuestion.id]: answer,
-      },
-      results: nextResults,
-      isSubmitted: true,
-      correctCount: session.correctCount + (isCorrect ? 1 : 0),
-      earnedXp: session.earnedXp + xpEarned,
-    });
-    setCurrentAnswer(typeof answer === "string" ? answer : answer.join(" / "));
+    recordAttempt(attempt);
+    setAttempts((current) => [...current, attempt]);
     setFeedback({
-      isCorrect,
       selectedAnswer: formatAnswer(answer),
       correctAnswer: formatAnswer(currentQuestion.answer),
+      isCorrect: correct,
       explanation: currentQuestion.explanation,
-      xpEarned,
+      xpEarned: correct ? XP_PER_CORRECT : 0,
     });
   };
 
-  const finishChallenge = () => {
-    if (!session || !currentQuestion) return;
+  const finishBatch = async () => {
+    if (
+      !session ||
+      !learningState ||
+      !currentBatch ||
+      attempts.length === 0
+    ) {
+      return;
+    }
 
-    const completedAt = new Date().toISOString();
-    const stars = calculateStars(
-      session.correctCount,
-      session.questionIds.length,
-    );
-    const knowledgePointIds = Array.from(
-      new Set(
-        session.questionIds.flatMap((questionId) => {
-          const question = questions.find((item) => item.id === questionId);
-          return question?.knowledgePointIds ?? [];
-        }),
-      ),
-    );
-    const challenge = buildChallengeRecord({
-      id: session.challengeId,
-      questionIds: session.questionIds,
-      knowledgePointIds,
-      correctAnswers: session.correctCount,
-      questionXp: session.earnedXp,
-      stars,
-      startedAt: startedAtRef.current,
-      completedAt,
-    });
+    setStatus("analyzing");
+    setFeedback(null);
 
-    completeChallenge({
-      challenge,
-      attempts: attemptsRef.current,
-    });
-    router.push(`/result/${encodeURIComponent(challenge.id)}`);
+    try {
+      const batchQuestionIds = new Set(
+        currentBatch.questions.map((question) => question.id),
+      );
+      const batchAttempts = attempts.filter((attempt) =>
+        batchQuestionIds.has(attempt.questionId),
+      );
+      const response = await completeAgentBatch({
+        userId: session.userId,
+        knowledge,
+        learningState,
+        sessionId: session.id,
+        attempts: batchAttempts,
+        currentBatch,
+        batchNumber,
+        decisions,
+        previousQuestions,
+      });
+
+      setLearningState(response.learningState);
+      const nextDecisions = [...decisions, response.decision];
+      setDecisions(nextDecisions);
+      setPreviousQuestions((current) => [
+        ...current,
+        ...currentBatch.questions.map((question) => question.question),
+      ]);
+
+      if (response.decision.action === "continue") {
+        if (!response.batch) throw new Error("Agent 未返回下一批题目");
+        saveQuestions(response.batch.questions);
+        setNextBatch(response.batch);
+        setBatchNumber((current) => current + 1);
+        setContinueReason(response.decision.reason);
+        setStatus("continue-ready");
+        return;
+      }
+
+      if (!response.sessionSummary) {
+        throw new Error("Agent 未返回 SessionSummary");
+      }
+
+      completeSession(
+        session.id,
+        response.sessionSummary,
+        response.learningState,
+      );
+      router.push(`/result/${encodeURIComponent(session.id)}`);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Agent 分析失败",
+      );
+      setStatus("error");
+    }
   };
 
   const handleNext = () => {
-    if (!session || !feedback) return;
-
-    if (session.currentIndex < session.questionIds.length - 1) {
-      setSession({
-        ...session,
-        currentIndex: session.currentIndex + 1,
-        isSubmitted: false,
-      });
-      setCurrentAnswer("");
+    if (!currentBatch || !feedback) return;
+    if (currentIndex < currentBatch.questions.length - 1) {
+      setCurrentIndex((current) => current + 1);
       setFeedback(null);
-        return;
+      return;
     }
-
-    finishChallenge();
+    void finishBatch();
   };
 
-  if (!session || !currentQuestion) {
+  const startNextBatch = () => {
+    if (!nextBatch) return;
+    setCurrentBatch(nextBatch);
+    setNextBatch(null);
+    setCurrentIndex(0);
+    setFeedback(null);
+    setContinueReason("");
+    setStatus("question");
+  };
+
+  const answerState = (answer: string | boolean) => {
+    if (!feedback || !currentQuestion) return "idle" as const;
+    if (answer === currentQuestion.answer) return "correct" as const;
+    if (formatAnswer(answer) === feedback.selectedAnswer) return "wrong" as const;
+    return "idle" as const;
+  };
+
+  if (status === "loading") {
     return (
       <ForestBackdrop compact>
         <div className="flex min-h-[70vh] flex-col items-center justify-center rounded-[2rem] bg-white/85 p-8 text-center shadow-sm">
-          <span className="animate-bounce text-4xl">🌱</span>
-          <p className="mt-3 font-black text-[#315341]">正在准备挑战…</p>
+          <span className="animate-bounce text-4xl">🤖</span>
+          <p className="mt-3 font-black text-[#315341]">
+            Agent 正在准备本批 10 道题…
+          </p>
         </div>
       </ForestBackdrop>
     );
   }
 
-  const answerState = (option: string) => {
-    if (!feedback) return "idle" as const;
-    if (option === currentQuestion.answer) return "correct" as const;
-    if (option === feedback.selectedAnswer) return "wrong" as const;
-    return "idle" as const;
-  };
+  if (status === "error") {
+    return (
+      <ForestBackdrop compact>
+        <div className="mx-auto flex min-h-[70vh] max-w-xl flex-col items-center justify-center rounded-[2rem] bg-white/90 p-8 text-center shadow-sm">
+          <span className="text-5xl">🍂</span>
+          <h1 className="mt-4 text-2xl font-black text-[#173f2a]">
+            Agent 暂时没有准备好
+          </h1>
+          <p className="mt-2 text-sm font-semibold leading-6 text-[#74887b]">
+            {errorMessage}
+          </p>
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="mt-6 rounded-2xl bg-[#2d995b] px-6 py-4 font-black text-white"
+          >
+            重新加载
+          </button>
+        </div>
+      </ForestBackdrop>
+    );
+  }
+
+  if (status === "analyzing") {
+    return (
+      <ForestBackdrop compact>
+        <div className="flex min-h-[70vh] flex-col items-center justify-center rounded-[2rem] bg-white/85 p-8 text-center shadow-sm">
+          <span className="animate-bounce text-4xl">🌿</span>
+          <p className="mt-3 font-black text-[#315341]">
+            Agent 正在分析这 10 道题…
+          </p>
+          <p className="mt-2 text-sm font-semibold text-[#74887b]">
+            程序已经完成本地判分，正在生成下一步教学建议。
+          </p>
+        </div>
+      </ForestBackdrop>
+    );
+  }
+
+  if (status === "continue-ready") {
+    const focusTitles =
+      decisions
+        .at(-1)
+        ?.focus.map(
+          (id) =>
+            knowledge.subtopics.find((subtopic) => subtopic.id === id)?.title,
+        )
+        .filter((title): title is string => Boolean(title)) ?? [];
+
+    return (
+      <ForestBackdrop compact>
+        <div className="mx-auto flex min-h-[70vh] max-w-xl flex-col items-center justify-center rounded-[2rem] bg-white/92 p-8 text-center shadow-[0_20px_55px_rgba(47,108,66,0.14)]">
+          <span className="text-5xl">🧭</span>
+          <p className="mt-3 text-sm font-black tracking-wide text-[#2c8a56]">
+            第 {batchNumber - 1} 批完成
+          </p>
+          <h1 className="mt-2 text-2xl font-black text-[#173f2a]">
+            Agent 建议继续练习
+          </h1>
+          <p className="mt-3 text-sm font-semibold leading-6 text-[#60786a]">
+            {continueReason}
+          </p>
+          {focusTitles.length > 0 ? (
+            <p className="mt-4 rounded-2xl bg-[#fff5d4] px-4 py-3 text-sm font-black text-[#8a5a00]">
+              下一批重点：{focusTitles.join("、")}
+            </p>
+          ) : null}
+          <button
+            type="button"
+            onClick={startNextBatch}
+            className="mt-6 min-h-14 w-full rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-6 font-black text-white shadow-lg"
+          >
+            开始下一批 10 题
+          </button>
+        </div>
+      </ForestBackdrop>
+    );
+  }
+
+  if (!session || !currentQuestion || !currentBatch) {
+    return null;
+  }
+
+  const overallCorrect = attempts.filter((attempt) => attempt.correct).length;
 
   return (
     <ForestBackdrop compact>
       <header className="flex items-center justify-between gap-3">
         <Link
-          href={`/knowledge/${section.id}`}
+          href={`/knowledge/${knowledge.id}`}
           className="inline-flex min-h-11 items-center rounded-2xl bg-white/85 px-4 text-sm font-black text-[#315341] shadow-sm"
         >
           ← 规则
         </Link>
         <div className="flex items-center gap-2 rounded-2xl bg-white/85 px-4 py-2 shadow-sm">
           <span className="font-black text-[#315341]">
-            {session.currentIndex + 1} / {session.questionIds.length}
+            第 {batchNumber} 批 · {currentIndex + 1}/10
           </span>
           <span className="text-[#d9a417]">⭐</span>
-          <span className="font-black text-[#b27b00]">{session.earnedXp}</span>
+          <span className="font-black text-[#b27b00]">
+            {overallCorrect * XP_PER_CORRECT}
+          </span>
         </div>
       </header>
 
       <main className="mx-auto mt-5 max-w-2xl">
+        <div className="mb-2 flex justify-between text-xs font-black text-[#60786a]">
+          <span>{provider === "openai" ? "AI 教学引擎" : "演示教学引擎"}</span>
+          <span>程序本地判分</span>
+        </div>
         <ProgressBar
-          value={session.currentIndex + (feedback ? 1 : 0)}
-          max={session.questionIds.length}
+          value={currentIndex + (feedback ? 1 : 0)}
+          max={currentBatch.questions.length}
           tone="yellow"
         />
 
@@ -260,70 +368,54 @@ export function GameView({
             <span className="rounded-full bg-[#eaf7e7] px-3 py-1 text-xs font-black text-[#2a7849]">
               {questionTypeLabels[currentQuestion.type]}
             </span>
-            {knowledgePoint ? (
-              <span className="rounded-full bg-[#fff5d4] px-3 py-1 text-xs font-black text-[#8a5a00]">
-                {knowledgePoint.title}
-              </span>
-            ) : null}
+            <span className="rounded-full bg-[#fff5d4] px-3 py-1 text-xs font-black text-[#8a5a00]">
+              {
+                knowledge.subtopics.find(
+                  (subtopic) =>
+                    subtopic.id === currentQuestion.knowledgeSubtopic,
+                )?.title
+              }
+            </span>
+            <span className="rounded-full bg-[#eef3fb] px-3 py-1 text-xs font-black text-[#496887]">
+              难度 {currentQuestion.difficulty}
+            </span>
           </div>
 
-          <h1 className="mt-5 whitespace-pre-wrap text-2xl font-black leading-relaxed text-[#173f2a] sm:text-3xl">
-            {currentQuestion.prompt}
+          <h1 className="mt-5 text-2xl font-black leading-relaxed text-[#173f2a] sm:text-3xl">
+            {currentQuestion.question}
           </h1>
 
-          {currentQuestion.type === "choice" ? (
-            <div className="mt-6 space-y-3">
-              {(currentQuestion.options ?? []).map((option) => (
-                <AnswerButton
-                  key={option}
-                  onClick={() => submitAnswer(option)}
-                  disabled={Boolean(feedback)}
-                  state={answerState(option)}
-                >
-                  {option}
-                </AnswerButton>
-              ))}
-            </div>
-          ) : (
-            <form
-              className="mt-6"
-              onSubmit={(event) => {
-                event.preventDefault();
-                submitAnswer();
-              }}
-            >
-              {currentQuestion.type === "sentence-translation" ? (
-                <textarea
-                  value={currentAnswer}
-                  onChange={(event) => setCurrentAnswer(event.target.value)}
-                  disabled={Boolean(feedback)}
-                  autoFocus
-                  rows={3}
-                  placeholder="在这里输入英文句子…"
-                  className="w-full resize-none rounded-2xl border-2 border-[#dce8d6] bg-[#fbfdf8] px-4 py-4 text-base font-bold text-[#214d32] outline-none transition placeholder:text-[#9aab9f] focus:border-[#66c979] disabled:opacity-80"
-                />
-              ) : (
-                <input
-                  value={currentAnswer}
-                  onChange={(event) => setCurrentAnswer(event.target.value)}
-                  disabled={Boolean(feedback)}
-                  autoFocus
-                  autoComplete="off"
-                  placeholder="输入英文答案"
-                  className="h-14 w-full rounded-2xl border-2 border-[#dce8d6] bg-[#fbfdf8] px-4 text-base font-extrabold text-[#214d32] outline-none transition placeholder:text-[#9aab9f] focus:border-[#66c979] disabled:opacity-80"
-                />
-              )}
-              {!feedback ? (
-                <button
-                  type="submit"
-                  disabled={!currentAnswer.trim()}
-                  className="mt-4 min-h-14 w-full rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-6 text-base font-black text-white shadow-lg transition hover:-translate-y-0.5 disabled:cursor-not-allowed disabled:opacity-45"
-                >
-                  提交答案
-                </button>
-              ) : null}
-            </form>
-          )}
+          <div className="mt-6 space-y-3">
+            {currentQuestion.type === "choice"
+              ? (currentQuestion.options ?? []).map((option) => (
+                  <AnswerButton
+                    key={option}
+                    onClick={() => handleAnswer(option)}
+                    disabled={Boolean(feedback)}
+                    state={answerState(option)}
+                  >
+                    {option}
+                  </AnswerButton>
+                ))
+              : [
+                  <AnswerButton
+                    key="true"
+                    onClick={() => handleAnswer(true)}
+                    disabled={Boolean(feedback)}
+                    state={answerState(true)}
+                  >
+                    ✅ 正确
+                  </AnswerButton>,
+                  <AnswerButton
+                    key="false"
+                    onClick={() => handleAnswer(false)}
+                    disabled={Boolean(feedback)}
+                    state={answerState(false)}
+                  >
+                    ❌ 错误
+                  </AnswerButton>,
+                ]}
+          </div>
         </section>
 
         {feedback ? (
@@ -355,11 +447,9 @@ export function GameView({
                 <p className="mt-1 text-sm font-bold text-[#315341]">
                   ✅ 正确答案：{feedback.correctAnswer}
                 </p>
-                {feedback.explanation ? (
-                  <p className="mt-2 text-sm font-semibold leading-6 text-[#60786a]">
-                    {feedback.explanation}
-                  </p>
-                ) : null}
+                <p className="mt-2 text-sm font-semibold leading-6 text-[#60786a]">
+                  {feedback.explanation}
+                </p>
                 {feedback.xpEarned > 0 ? (
                   <p className="mt-3 inline-flex rounded-full bg-white px-3 py-1 text-sm font-black text-[#d28a00]">
                     +{feedback.xpEarned} XP
@@ -372,8 +462,8 @@ export function GameView({
               onClick={handleNext}
               className="mt-5 min-h-14 w-full rounded-2xl bg-[#245f3c] px-6 text-base font-black text-white shadow-lg transition hover:-translate-y-0.5"
             >
-              {session.currentIndex === session.questionIds.length - 1
-                ? "查看挑战结果"
+              {currentIndex === currentBatch.questions.length - 1
+                ? "完成本批并交给 Agent"
                 : "下一题"}
               <span className="ml-2" aria-hidden="true">
                 →
@@ -382,9 +472,7 @@ export function GameView({
           </section>
         ) : (
           <p className="mt-4 text-center text-xs font-bold text-[#74887b]">
-            {currentQuestion.type === "choice"
-              ? "选择答案后会立即反馈"
-              : "输入答案后点击提交"}
+            选择答案后立即由程序判分
           </p>
         )}
       </main>

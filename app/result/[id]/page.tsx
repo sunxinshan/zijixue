@@ -1,9 +1,5 @@
 import { ResultView } from "@/components/result/ResultView";
-import {
-  comparativesKnowledgePoints,
-  comparativesQuestions,
-  comparativesSection,
-} from "@/data/content/comparatives";
+import { comparativeKnowledge } from "@/data/knowledge/comparative";
 
 export default async function ResultPage({
   params,
@@ -12,12 +8,5 @@ export default async function ResultPage({
 }) {
   const { id } = await params;
 
-  return (
-    <ResultView
-      challengeId={id}
-      section={comparativesSection}
-      knowledgePoints={comparativesKnowledgePoints}
-      questions={comparativesQuestions}
-    />
-  );
+  return <ResultView sessionId={id} knowledge={comparativeKnowledge} />;
 }

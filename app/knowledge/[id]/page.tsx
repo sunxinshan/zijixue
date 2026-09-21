@@ -1,11 +1,7 @@
 import { notFound } from "next/navigation";
 
 import { KnowledgeView } from "@/components/knowledge/KnowledgeView";
-import {
-  comparativesKnowledgePoints,
-  comparativesSection,
-  comparativesSectionId,
-} from "@/data/content/comparatives";
+import { getKnowledge } from "@/data/knowledge/comparative";
 
 export default async function KnowledgePage({
   params,
@@ -13,15 +9,9 @@ export default async function KnowledgePage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
+  const knowledge = getKnowledge(id);
 
-  if (id !== comparativesSectionId) {
-    notFound();
-  }
+  if (!knowledge) notFound();
 
-  return (
-    <KnowledgeView
-      section={comparativesSection}
-      knowledgePoints={comparativesKnowledgePoints}
-    />
-  );
+  return <KnowledgeView knowledge={knowledge} />;
 }

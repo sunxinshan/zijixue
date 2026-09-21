@@ -3,15 +3,15 @@
 import { useSyncExternalStore } from "react";
 
 import {
-  getAppStorageSnapshot,
-  getServerAppStorageSnapshot,
-  subscribeToAppStorage,
+  getAgentStorageSnapshot,
+  getServerAgentStorageSnapshot,
+  subscribeToAgentStorage,
 } from "@/lib/storage";
 
 export function useAppStorage() {
   return useSyncExternalStore(
-    subscribeToAppStorage,
-    getAppStorageSnapshot,
-    getServerAppStorageSnapshot,
+    subscribeToAgentStorage,
+    getAgentStorageSnapshot,
+    getServerAgentStorageSnapshot,
   );
 }
