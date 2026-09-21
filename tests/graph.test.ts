@@ -75,7 +75,7 @@ async function runBatch(
   };
 }
 
-test("LangGraph 启动流程生成 TeachingStrategy 和 10 道题", async () => {
+test("LangGraph 启动流程生成 TeachingStrategy 和 15 道题", async () => {
   const provider = createMockLLMProvider();
   const learningState = createInitialLearningState("local-user", "comparative");
   const started = await runStartSessionGraph(
@@ -87,11 +87,14 @@ test("LangGraph 启动流程生成 TeachingStrategy 和 10 道题", async () => 
     provider,
   );
 
-  assert.equal(started.batch.questions.length, 10);
-  assert.equal(started.strategy.questionDistribution.reduce(
-    (sum, item) => sum + item.count,
-    0,
-  ), 10);
+  assert.equal(started.batch.questions.length, 15);
+  assert.equal(
+    started.strategy.questionDistribution.reduce(
+      (sum, item) => sum + item.count,
+      0,
+    ),
+    15,
+  );
   assert.ok(started.sessionId.startsWith("session-"));
 });
 
@@ -109,11 +112,11 @@ test("未达标 batch 返回 continue、TeachingStrategy 和下一批题目", as
     batchNumber: 1,
     strategies: [started.strategy],
     pastBatches: [],
-    correctCount: 5,
+    correctCount: 8,
   });
 
   assert.notEqual(result.strategy.action, "finish");
-  assert.equal(result.batch?.questions.length, 10);
+  assert.equal(result.batch?.questions.length, 15);
   assert.equal(result.sessionSummary, undefined);
   const firstBatchIds = new Set(
     started.batch.questions.map((question) => question.id),
@@ -139,7 +142,7 @@ test("连续稳定正确后生成 Summary 并更新 LearningState", async () => 
     batchNumber: 1,
     strategies: [started.strategy],
     pastBatches: [],
-    correctCount: 10,
+    correctCount: 15,
   });
   assert.notEqual(first.result.strategy.action, "finish");
   assert.ok(first.result.batch);
@@ -151,7 +154,7 @@ test("连续稳定正确后生成 Summary 并更新 LearningState", async () => 
     batchNumber: 2,
     strategies: [started.strategy, first.result.strategy],
     pastBatches: [first.performance],
-    correctCount: 10,
+    correctCount: 15,
   });
 
   assert.equal(second.result.strategy.diagnosis, "mastered");

@@ -68,12 +68,12 @@ Agent 可以发现学生在某个 subtopic 上较弱，并在当前 Level 内重
 
 ## 4. Batch
 
-MVP 一次生成 10 道题，而不是每题调用一次 LLM。
+MVP 一次生成 15 道题，而不是每题调用一次 LLM。
 
 ```text
 Agent 分析当前状态
  ↓
-LLM 一次生成 10 道题
+LLM 一次生成 15 道题
  ↓
 前端逐题展示
  ↓
@@ -81,7 +81,7 @@ LLM 一次生成 10 道题
  ↓
 记录 Attempt
  ↓
-10 道完成
+15 道完成
  ↓
 Agent 分析 Batch
  ↓
@@ -264,7 +264,7 @@ LLM_API_KEY=xxx
 ## 15. Question Validation
 
 至少校验：
-- 正好 10 道题
+- 正好 15 道题
 - 合法题型
 - choice 存在 options
 - answer 合法

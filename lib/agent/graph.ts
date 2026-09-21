@@ -17,7 +17,7 @@ import {
   validateSessionSummary,
   validateTeachingStrategy,
 } from "@/lib/agent/validation";
-import { createLocalId } from "@/lib/game";
+import { createLocalId, QUESTIONS_PER_BATCH } from "@/lib/game";
 import { buildLearningStateFromSummary } from "@/lib/mastery";
 import type {
   Attempt,
@@ -208,8 +208,13 @@ function createCompletionGraph(provider: LLMProvider) {
     );
     const actualIds = new Set(state.attempts.map((attempt) => attempt.id));
 
-    if (state.attempts.length !== 10 || actualIds.size !== 10) {
-      throw new AgentValidationError("record_attempt 必须收到 10 条唯一 Attempt");
+    if (
+      state.attempts.length !== QUESTIONS_PER_BATCH ||
+      actualIds.size !== QUESTIONS_PER_BATCH
+    ) {
+      throw new AgentValidationError(
+        `record_attempt 必须收到 ${QUESTIONS_PER_BATCH} 条唯一 Attempt`,
+      );
     }
 
     for (const attempt of state.attempts) {

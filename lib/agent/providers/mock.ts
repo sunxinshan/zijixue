@@ -1,6 +1,7 @@
 import type { z } from "zod";
 
 import { countConsecutiveWeakBatches } from "@/lib/agent/analysis";
+import { QUESTIONS_PER_BATCH } from "@/lib/game";
 import type { LLMProvider } from "@/lib/agent/llm";
 import {
   validateQuestionBatch,
@@ -78,7 +79,7 @@ function distributeRemainder(
   const others = knowledge.subtopics
     .map((subtopic) => subtopic.id)
     .filter((id) => id !== primary);
-  let remaining = 10 - primaryCount;
+  let remaining = QUESTIONS_PER_BATCH - primaryCount;
 
   for (let index = 0; remaining > 0; index += 1) {
     const subtopic = others[index % others.length];
@@ -96,7 +97,7 @@ function balancedDistribution(knowledge: Knowledge): QuestionDistributionItem[] 
     subtopic: subtopic.id,
     count: 0,
   }));
-  for (let index = 0; index < 10; index += 1) {
+  for (let index = 0; index < QUESTIONS_PER_BATCH; index += 1) {
     distribution[index % distribution.length].count += 1;
   }
   return distribution.filter((item) => item.count > 0);
@@ -108,13 +109,13 @@ function twoFocusDistribution(
   second: string,
 ): QuestionDistributionItem[] {
   const distribution: QuestionDistributionItem[] = [
-    { subtopic: first, count: 4 },
-    { subtopic: second, count: 4 },
+    { subtopic: first, count: 6 },
+    { subtopic: second, count: 6 },
   ];
   const others = knowledge.subtopics
     .map((subtopic) => subtopic.id)
     .filter((id) => id !== first && id !== second);
-  let remaining = 2;
+  let remaining = 3;
 
   for (let index = 0; remaining > 0; index += 1) {
     const subtopic = others[index % others.length];
@@ -348,7 +349,7 @@ function generateMockQuestions(context: BatchGenerationContext): QuestionBatch {
   const previous = new Set(context.previousQuestions);
   const questions: Question[] = [];
 
-  for (let index = 0; index < plan.length && questions.length < 10; index += 1) {
+  for (let index = 0; index < plan.length && questions.length < QUESTIONS_PER_BATCH; index += 1) {
     const entry = plan[index];
     const form = index % 2 === 0 ? "comparative" : "superlative";
     const correct = entry.example[form];

@@ -101,7 +101,7 @@ START
 
 ## 四、题目生成
 
-MVP 一次生成 10 道题。
+MVP 一次生成 15 道题。
 
 只允许：
 
@@ -120,11 +120,11 @@ MVP 一次生成 10 道题。
 
 ```text
 Agent / LLM
-→ 一次生成 10 道题
+→ 一次生成 15 道题
 → 前端逐题展示
 → 程序本地判断
 → 记录 Attempt
-→ 10 道完成后再调用 Agent 分析
+→ 15 道完成后再调用 Agent 分析
 ```
 
 ---
@@ -159,7 +159,7 @@ timestamp
 
 ## 七、Batch Analysis
 
-每 10 道题完成后，让 Agent 综合分析。
+每 15 道题完成后，让 Agent 综合分析。
 
 Agent 输出：
 
@@ -170,7 +170,7 @@ difficulty: 下一批题目的难度
 reason: 对当前学习情况的解释
 ```
 
-如果 continue，生成下一批 10 道题。
+如果 continue，生成下一批 15 道题。
 
 下一批题目应该根据 Agent 的 focus 进行针对性训练。
 
@@ -253,7 +253,7 @@ LLM_API_KEY=xxx
 
 LLM 生成题目后必须验证：
 
-- 正好 10 道
+- 正好 15 道
 - type 合法
 - choice 存在 options
 - answer 有效
@@ -319,11 +319,11 @@ MVP 使用 LocalStorage。
 进入一个 Knowledge
 → 创建 Session
 → 读取 LearningState
-→ Agent 生成 10 道题
+→ Agent 生成 15 道题
 → 前端逐题答题
 → 程序本地判断
 → 记录 Attempt
-→ 10 道完成
+→ 15 道完成
 → Agent 分析 Batch
 → continue / finish
 ```
@@ -331,7 +331,7 @@ MVP 使用 LocalStorage。
 continue：
 
 ```text
-→ 再生成下一批 10 道针对性题目
+→ 再生成下一批 15 道针对性题目
 ```
 
 finish：

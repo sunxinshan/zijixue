@@ -1,5 +1,6 @@
 import { z } from "zod";
 
+import { QUESTIONS_PER_BATCH } from "@/lib/game";
 import type {
   BatchObservation,
   BatchPerformance,
@@ -24,7 +25,7 @@ const scoreLevelSchema = z.union([
 
 export const questionDistributionItemSchema = z.object({
   subtopic: z.string().min(1),
-  count: z.number().int().min(0).max(10),
+  count: z.number().int().min(0).max(QUESTIONS_PER_BATCH),
 });
 
 export const teachingStrategySchema = z.object({
@@ -240,9 +241,12 @@ export function validateTeachingStrategy(
   }
 
   const distributionTotal = distribution.reduce((sum, item) => sum + item.count, 0);
-  if (parsed.data.action !== "finish" && distributionTotal !== 10) {
+  if (
+    parsed.data.action !== "finish" &&
+    distributionTotal !== QUESTIONS_PER_BATCH
+  ) {
     throw new AgentValidationError(
-      `questionDistribution 总数必须为 10，实际为 ${distributionTotal}`,
+      `questionDistribution 总数必须为 ${QUESTIONS_PER_BATCH}，实际为 ${distributionTotal}`,
     );
   }
   if (parsed.data.action === "finish" && distributionTotal !== 0) {
@@ -297,8 +301,10 @@ export function validateQuestionBatch(
   }
 
   const questions = parsed.data.questions as Question[];
-  if (questions.length !== 10) {
-    throw new AgentValidationError(`题目数量必须为 10，实际为 ${questions.length}`);
+  if (questions.length !== QUESTIONS_PER_BATCH) {
+    throw new AgentValidationError(
+      `题目数量必须为 ${QUESTIONS_PER_BATCH}，实际为 ${questions.length}`,
+    );
   }
 
   const subtopicIds = new Set(knowledge.subtopics.map((subtopic) => subtopic.id));

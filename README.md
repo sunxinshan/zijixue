@@ -15,7 +15,7 @@ TeachingStrategy
   ↓
 questionDistribution
   ↓
-10 道 choice / true-false
+15 道 choice / true-false
   ↓
 学生答题
   ↓

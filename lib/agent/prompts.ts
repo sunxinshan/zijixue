@@ -31,7 +31,7 @@ export function buildTeachingStrategyPrompt(
 - focus 必须是字符串数组，元素只能使用合法 subtopic id。
 - difficulty 必须是 1 到 5 的整数。
 - questionDistribution 必须是数组，每项包含 subtopic 和 count。
-- 除 finish 外，questionDistribution 的 count 总和必须正好为 10。
+- 除 finish 外，questionDistribution 的 count 总和必须正好为 15。
 - finish 时 questionDistribution 必须是空数组。
 - strategyLevel 3 以上，必须提供 explanation 和 examples。
 - examples 必须是字符串数组，例如 ["happy → happier → happiest"]，不要返回对象数组。
@@ -59,7 +59,7 @@ export function buildBatchGenerationPrompt(context: BatchGenerationContext): str
   return `你是“英语森林”的题目生成 Agent。程序已经决定教学策略和题目分布，你只能严格按照边界生成题目。
 
 任务边界：
-- 必须生成正好 10 道题。
+- 必须生成正好 15 道题。
 - 只允许 choice 和 true-false。
 - 每道题必须属于 knowledgeId="${context.knowledge.id}"。
 - knowledgeSubtopic 只能使用当前 Knowledge 的合法 subtopic id。

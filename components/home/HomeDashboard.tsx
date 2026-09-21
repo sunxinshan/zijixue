@@ -102,11 +102,11 @@ export function HomeDashboard() {
               比较级大冒险
             </h1>
             <p className="mt-3 max-w-md text-sm font-semibold leading-6 text-white/85 sm:text-base">
-              Agent 会读取长期学习状态，每次动态生成 10 道选择或判断题。
+              Agent 会读取长期学习状态，每次动态生成 15 道选择或判断题。
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-3 text-sm font-bold">
               <span className="rounded-2xl bg-white/15 px-3 py-2">
-                一批 10 题
+                一批 15 题
               </span>
               <span className="rounded-2xl bg-white/15 px-3 py-2">
                 {masteryMeta.icon} {masteryMeta.label}

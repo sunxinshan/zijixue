@@ -144,14 +144,14 @@ START
 
 ## 8. Question 和 Validation
 
-每批正好 10 道题，只支持：
+每批正好 15 道题，只支持：
 
 - choice
 - true-false
 
 Validator 校验：
 
-- 10 道题
+- 15 道题
 - 类型合法
 - choice 的 options 和 answer 合法
 - true-false answer 为 boolean
@@ -221,11 +221,11 @@ API Key 只存在于服务端环境变量，不会进入浏览器。
 
 自动化测试覆盖：
 
-- A：9/10，错误分散 → accidental
-- B：6/10，y-ending 集中错误 → subtopic_weakness + 提高占比
+- A：14/15，错误分散 → accidental
+- B：9/15，y-ending 集中错误 → subtopic_weakness + 提高占比
 - C：连续 y-ending 错误 → rule_misunderstanding + explain + examples
 - D：两个 batch y-ending 失败 → persistent_failure + strategyLevel 4
-- E：6/10 → 8/10 → 9/10 → improving + 提高难度
+- E：9/15 → 12/15 → 14/15 → improving + 提高难度
 - F：多个 batch 稳定正确 → mastered + finish
 - questionDistribution 总数校验
 - LangGraph 启动、continue、finish
@@ -235,10 +235,10 @@ API Key 只存在于服务端环境变量，不会进入浏览器。
 
 真实 DeepSeek 验证：
 
-- 生成 10 道题和 questionDistribution
+- 生成 15 道题和 questionDistribution
 - 识别 y-ending 和 double-consonant 的集中错误
 - 输出 explanation 和规范化 examples
-- 生成下一批 10 道针对性题目
+- 生成下一批 15 道针对性题目
 
 ## 12. 当前限制
 

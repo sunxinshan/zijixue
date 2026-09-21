@@ -116,7 +116,7 @@ interface QuestionBatch {
 }
 ```
 
-MVP 要求 `questions.length === 10`。
+MVP 要求 `questions.length === 15`。
 
 ## 8. AgentDecision
 

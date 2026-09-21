@@ -40,7 +40,7 @@
 策略：不要只是继续刷同类题，应考虑降低难度、更换题型、规则识别、正反例、减少干扰项、重新解释、拆分问题。
 
 ### improving
-表现连续提高，例如 6/10 → 8/10 → 9/10。
+表现连续提高，例如 9/15 → 12/15 → 14/15。
 
 策略：逐步提高难度，增加混合题。
 
@@ -98,16 +98,16 @@ interface TeachingStrategy {
 
 ## 4. Question Distribution
 
-下一批仍然生成 10 道题。
+下一批仍然生成 15 道题。
 
 例如：
 
 ```json
 {
   "questionDistribution": [
-    { "subtopic": "y-ending", "count": 6 },
-    { "subtopic": "regular", "count": 2 },
-    { "subtopic": "e-ending", "count": 1 },
+    { "subtopic": "y-ending", "count": 9 },
+    { "subtopic": "regular", "count": 3 },
+    { "subtopic": "e-ending", "count": 2 },
     { "subtopic": "irregular", "count": 1 }
   ]
 }
@@ -115,7 +115,7 @@ interface TeachingStrategy {
 
 要求：
 
-- 总数必须等于 10
+- 总数必须等于 15
 - subtopic 必须属于当前 Knowledge
 - 不允许越过当前 Level
 - 程序必须校验 Agent 输出
@@ -210,15 +210,15 @@ Agent 负责 analyze_batch、generate_teaching_strategy、generate_question_batc
 
 ## 9. 验收测试
 
-A：9/10，错误分散 → 正常继续。
+A：14/15，错误分散 → 正常继续。
 
-B：6/10，其中 4 个 y-ending 错误 → 下一批明显增加 y-ending。
+B：9/15，其中 6 个 y-ending 错误 → 下一批明显增加 y-ending。
 
 C：连续 y-ending 错误 → explain + examples + 简单练习。
 
 D：连续两个 batch 在 y-ending 上失败 → persistent_failure + strategyLevel 提升 + 改变教学方式。
 
-E：6/10 → 8/10 → 9/10 → improving + 逐步提高难度。
+E：9/15 → 12/15 → 14/15 → improving + 逐步提高难度。
 
 F：多个 batch 稳定正确 → mastered + 综合验证 + 结束 Session。
 

@@ -72,9 +72,9 @@ test("Mock Provider 按 questionDistribution 生成可信题目", async () => {
     focus: ["y-ending"],
     difficulty: 2,
     questionDistribution: [
-      { subtopic: "y-ending", count: 6 },
-      { subtopic: "regular", count: 2 },
-      { subtopic: "e-ending", count: 1 },
+      { subtopic: "y-ending", count: 9 },
+      { subtopic: "regular", count: 3 },
+      { subtopic: "e-ending", count: 2 },
       { subtopic: "irregular", count: 1 },
     ],
     reason: "y-ending 薄弱。",
@@ -99,24 +99,24 @@ test("Mock Provider 按 questionDistribution 生成可信题目", async () => {
     strategy.questionDistribution,
   );
 
-  assert.equal(validated.questions.length, 10);
+  assert.equal(validated.questions.length, 15);
   assert.equal(
     validated.questions.filter(
       (question) => question.knowledgeSubtopic === "y-ending",
     ).length,
-    6,
+    9,
   );
 });
 
-test("A：9/10 且错误分散为 accidental", async () => {
+test("A：14/15 且错误分散为 accidental", async () => {
   const observation: BatchObservation = {
     batchNumber: 1,
-    currentBatch: performance(1, 90, {
-      regular: { correct: 2, total: 2 },
-      "e-ending": { correct: 2, total: 2 },
+    currentBatch: performance(1, 93, {
+      regular: { correct: 3, total: 3 },
+      "e-ending": { correct: 3, total: 3 },
       "y-ending": { correct: 1, total: 2 },
-      "double-consonant": { correct: 2, total: 2 },
-      irregular: { correct: 2, total: 2 },
+      "double-consonant": { correct: 3, total: 3 },
+      irregular: { correct: 4, total: 4 },
     }),
     pastBatches: [],
     previousStrategies: [],
@@ -128,14 +128,14 @@ test("A：9/10 且错误分散为 accidental", async () => {
   assert.equal(strategy.strategyLevel, 1);
 });
 
-test("B：y-ending 集中错误会增加下一批占比", async () => {
+test("B：9/15，y-ending 集中错误会增加下一批占比", async () => {
   const observation: BatchObservation = {
     batchNumber: 1,
     currentBatch: performance(1, 60, {
-      regular: { correct: 2, total: 2 },
-      "e-ending": { correct: 2, total: 2 },
-      "y-ending": { correct: 0, total: 4 },
-      "double-consonant": { correct: 1, total: 1 },
+      regular: { correct: 3, total: 3 },
+      "e-ending": { correct: 3, total: 3 },
+      "y-ending": { correct: 0, total: 6 },
+      "double-consonant": { correct: 2, total: 2 },
       irregular: { correct: 1, total: 1 },
     }),
     pastBatches: [],
@@ -156,12 +156,12 @@ test("C：连续 y-ending 错误进入 explanation + examples", async () => {
   const observation: BatchObservation = {
     batchNumber: 2,
     currentBatch: performance(2, 60, {
-      "y-ending": { correct: 1, total: 4 },
-      regular: { correct: 3, total: 3 },
-      "e-ending": { correct: 1, total: 2 },
-      irregular: { correct: 1, total: 1 },
+      "y-ending": { correct: 2, total: 6 },
+      regular: { correct: 4, total: 4 },
+      "e-ending": { correct: 2, total: 3 },
+      irregular: { correct: 1, total: 2 },
     }),
-    pastBatches: [performance(1, 75, { "y-ending": { correct: 3, total: 4 } })],
+    pastBatches: [performance(1, 80, { "y-ending": { correct: 5, total: 6 } })],
     previousStrategies: [],
     consecutiveSubtopicErrors: { "y-ending": 3 },
   };
@@ -177,16 +177,17 @@ test("D：连续两个 batch 的 y-ending 失败升级为 persistent_failure", a
   const observation: BatchObservation = {
     batchNumber: 2,
     currentBatch: performance(2, 60, {
-      "y-ending": { correct: 0, total: 4 },
+      "y-ending": { correct: 0, total: 6 },
       regular: { correct: 3, total: 3 },
-      "e-ending": { correct: 1, total: 2 },
-      irregular: { correct: 2, total: 1 },
+      "e-ending": { correct: 3, total: 3 },
+      irregular: { correct: 3, total: 3 },
     }),
     pastBatches: [
       performance(1, 50, {
-        "y-ending": { correct: 1, total: 4 },
-        regular: { correct: 2, total: 3 },
-        "e-ending": { correct: 1, total: 2 },
+        "y-ending": { correct: 1, total: 6 },
+        regular: { correct: 3, total: 4 },
+        "e-ending": { correct: 1, total: 3 },
+        irregular: { correct: 2, total: 2 },
       }),
     ],
     previousStrategies: [],
@@ -200,19 +201,19 @@ test("D：连续两个 batch 的 y-ending 失败升级为 persistent_failure", a
   assert.ok(strategy.examples?.length);
 });
 
-test("E：6/10 → 8/10 → 9/10 识别 improving 并提高难度", async () => {
+test("E：9/15 → 12/15 → 14/15 识别 improving 并提高难度", async () => {
   const observation: BatchObservation = {
     batchNumber: 3,
-    currentBatch: performance(3, 90, {
-      regular: { correct: 2, total: 2 },
-      "y-ending": { correct: 1, total: 2 },
+    currentBatch: performance(3, 93, {
+      regular: { correct: 3, total: 3 },
+      "y-ending": { correct: 5, total: 6 },
       "e-ending": { correct: 2, total: 2 },
       irregular: { correct: 2, total: 2 },
       "double-consonant": { correct: 2, total: 2 },
     }),
     pastBatches: [
-      performance(1, 60, { "y-ending": { correct: 0, total: 3 } }),
-      performance(2, 80, { "y-ending": { correct: 1, total: 3 } }),
+      performance(1, 60, { "y-ending": { correct: 3, total: 6 } }),
+      performance(2, 80, { "y-ending": { correct: 5, total: 6 } }),
     ],
     previousStrategies: [],
     consecutiveSubtopicErrors: { "y-ending": 1 },
@@ -226,15 +227,15 @@ test("F：多个 batch 稳定正确进入 mastered 并结束", async () => {
   const observation: BatchObservation = {
     batchNumber: 3,
     currentBatch: performance(3, 100, {
-      regular: { correct: 2, total: 2 },
-      "y-ending": { correct: 2, total: 2 },
-      "e-ending": { correct: 2, total: 2 },
-      irregular: { correct: 2, total: 2 },
-      "double-consonant": { correct: 2, total: 2 },
+      regular: { correct: 3, total: 3 },
+      "y-ending": { correct: 3, total: 3 },
+      "e-ending": { correct: 3, total: 3 },
+      irregular: { correct: 3, total: 3 },
+      "double-consonant": { correct: 3, total: 3 },
     }),
     pastBatches: [
-      performance(1, 100, { regular: { correct: 10, total: 10 } }),
-      performance(2, 100, { regular: { correct: 10, total: 10 } }),
+      performance(1, 100, { regular: { correct: 15, total: 15 } }),
+      performance(2, 100, { regular: { correct: 15, total: 15 } }),
     ],
     previousStrategies: [],
     consecutiveSubtopicErrors: {},
@@ -246,7 +247,7 @@ test("F：多个 batch 稳定正确进入 mastered 并结束", async () => {
   assert.deepEqual(strategy.questionDistribution, []);
 });
 
-test("Validator 拒绝 questionDistribution 总数不是 10", () => {
+test("Validator 拒绝 questionDistribution 总数不是 15", () => {
   assert.throws(
     () =>
       validateTeachingStrategy(
@@ -256,12 +257,12 @@ test("Validator 拒绝 questionDistribution 总数不是 10", () => {
           action: "targeted_practice",
           focus: ["y-ending"],
           difficulty: 2,
-          questionDistribution: [{ subtopic: "y-ending", count: 9 }],
+          questionDistribution: [{ subtopic: "y-ending", count: 14 }],
           reason: "测试",
         },
         comparativeKnowledge,
       ),
-    /总数必须为 10/,
+    /总数必须为 15/,
   );
 });
 

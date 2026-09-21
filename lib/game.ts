@@ -6,7 +6,7 @@ import type {
   Question,
 } from "@/types/agent";
 
-export const QUESTIONS_PER_BATCH = 10;
+export const QUESTIONS_PER_BATCH = 15;
 export const XP_PER_CORRECT = 10;
 export const XP_PER_SESSION = 30;
 export const XP_PER_LEVEL = 300;
