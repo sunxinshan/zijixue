@@ -120,6 +120,7 @@ interface LLMProvider {
 
 - `mock`：默认本地演示 Provider，不需要 API Key。
 - `openai`：通过 `@langchain/openai` 调用，支持 `LLM_MODEL`、`LLM_API_KEY` 和可选 `LLM_BASE_URL`。
+- `deepseek`：通过 OpenAI 兼容接口调用；默认 Base URL 为 `https://api.deepseek.com/v1`，模型由 `LLM_MODEL` 指定。
 
 OpenAI API Key 不会发送到浏览器。
 

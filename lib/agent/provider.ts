@@ -15,16 +15,19 @@ export function createLLMProvider(): LLMProvider {
     return createMockLLMProvider();
   }
 
-  if (providerName === "openai") {
+  if (providerName === "openai" || providerName === "deepseek") {
     const apiKey = process.env.LLM_API_KEY?.trim();
     const model = process.env.LLM_MODEL?.trim();
-    if (!apiKey) throw new Error("LLM_PROVIDER=openai 时必须配置 LLM_API_KEY");
-    if (!model) throw new Error("LLM_PROVIDER=openai 时必须配置 LLM_MODEL");
+    if (!apiKey) throw new Error(`LLM_PROVIDER=${providerName} 时必须配置 LLM_API_KEY`);
+    if (!model) throw new Error(`LLM_PROVIDER=${providerName} 时必须配置 LLM_MODEL`);
 
     return createOpenAIProvider({
       apiKey,
       model,
-      baseUrl: process.env.LLM_BASE_URL?.trim() || undefined,
+      providerName,
+      baseUrl:
+        process.env.LLM_BASE_URL?.trim() ||
+        (providerName === "deepseek" ? "https://api.deepseek.com/v1" : undefined),
     });
   }
 

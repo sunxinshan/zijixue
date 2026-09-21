@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { comparativeKnowledge } from "@/data/knowledge/comparative";
+import { createLLMProvider } from "@/lib/agent/provider";
 import { createMockLLMProvider } from "@/lib/agent/providers/mock";
 import { questionBatchPublicSchema, validateQuestionBatch } from "@/lib/agent/validation";
 import { createInitialLearningState } from "@/lib/mastery";
@@ -63,4 +64,29 @@ test("Validator 拒绝数量不足和重复题", () => {
     () => validateQuestionBatch(duplicate, comparativeKnowledge),
     /明显重复/,
   );
+});
+
+test("deepseek Provider 使用可配置模型和兼容接口", () => {
+  const previous = {
+    provider: process.env.LLM_PROVIDER,
+    model: process.env.LLM_MODEL,
+    apiKey: process.env.LLM_API_KEY,
+    baseUrl: process.env.LLM_BASE_URL,
+  };
+  process.env.LLM_PROVIDER = "deepseek";
+  process.env.LLM_MODEL = "deepseek-v4-flash";
+  process.env.LLM_API_KEY = "test-key";
+  delete process.env.LLM_BASE_URL;
+
+  const provider = createLLMProvider();
+  assert.equal(provider.kind, "deepseek");
+
+  if (previous.provider === undefined) delete process.env.LLM_PROVIDER;
+  else process.env.LLM_PROVIDER = previous.provider;
+  if (previous.model === undefined) delete process.env.LLM_MODEL;
+  else process.env.LLM_MODEL = previous.model;
+  if (previous.apiKey === undefined) delete process.env.LLM_API_KEY;
+  else process.env.LLM_API_KEY = previous.apiKey;
+  if (previous.baseUrl === undefined) delete process.env.LLM_BASE_URL;
+  else process.env.LLM_BASE_URL = previous.baseUrl;
 });

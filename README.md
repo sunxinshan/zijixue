@@ -60,18 +60,23 @@ cp .env.example .env.local
 LLM_PROVIDER=mock
 ```
 
-OpenAI 模式：
+DeepSeek 模式：
+
+```env
+LLM_PROVIDER=deepseek
+LLM_MODEL=deepseek-v4-flash
+LLM_API_KEY=your-api-key
+LLM_BASE_URL=https://api.deepseek.com/v1
+```
+
+`LLM_PROVIDER=deepseek` 使用 OpenAI 兼容接口；未设置 `LLM_BASE_URL` 时会默认使用 DeepSeek 官方地址。
+
+OpenAI 模式同样支持：
 
 ```env
 LLM_PROVIDER=openai
 LLM_MODEL=your-model-name
 LLM_API_KEY=your-api-key
-```
-
-可选 OpenAI 兼容接口：
-
-```env
-LLM_BASE_URL=https://api.openai.com/v1
 ```
 
 ## 本地运行

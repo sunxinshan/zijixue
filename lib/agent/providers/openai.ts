@@ -7,6 +7,7 @@ export interface OpenAIProviderConfig {
   apiKey: string;
   model: string;
   baseUrl?: string;
+  providerName?: string;
 }
 
 export function createOpenAIProvider(config: OpenAIProviderConfig): LLMProvider {
@@ -18,7 +19,7 @@ export function createOpenAIProvider(config: OpenAIProviderConfig): LLMProvider 
   });
 
   return {
-    kind: "openai",
+    kind: config.providerName ?? "openai",
     async generate<T>(prompt: string, schema: z.ZodType<T>): Promise<T> {
       const structuredModel = model.withStructuredOutput(schema, {
         name: "english_forest_response",
