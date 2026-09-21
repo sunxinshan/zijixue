@@ -69,6 +69,11 @@ test("Batch 未达标时 Agent 返回 continue 和下一批题目", async () => 
   assert.equal(completed.decision.action, "continue");
   assert.equal(completed.batch?.questions.length, 10);
   assert.equal(completed.sessionSummary, undefined);
+  const firstBatchIds = new Set(questionIds);
+  assert.equal(
+    completed.batch?.questions.some((question) => firstBatchIds.has(question.id)),
+    false,
+  );
 });
 
 test("Batch 达标时 Agent 生成 Summary 并更新 LearningState", async () => {

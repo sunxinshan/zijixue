@@ -23,6 +23,7 @@ export function createOpenAIProvider(config: OpenAIProviderConfig): LLMProvider 
     async generate<T>(prompt: string, schema: z.ZodType<T>): Promise<T> {
       const structuredModel = model.withStructuredOutput(schema, {
         name: "english_forest_response",
+        method: config.providerName === "deepseek" ? "jsonMode" : "functionCalling",
       });
       const result = await structuredModel.invoke(prompt);
       return result as T;

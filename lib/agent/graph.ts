@@ -75,6 +75,19 @@ const CompletionGraphState = Annotation.Root({
   ),
 });
 
+function assignProgramQuestionIds(
+  batch: QuestionBatch,
+  sessionId: string,
+  batchNumber: number,
+): QuestionBatch {
+  return {
+    questions: batch.questions.map((question, index) => ({
+      ...question,
+      id: `${sessionId}-b${batchNumber}-q${index + 1}`,
+    })),
+  };
+}
+
 function createStartGraph(provider: LLMProvider) {
   const loadContext = async (state: typeof StartGraphState.State) => {
     return {
@@ -102,7 +115,11 @@ function createStartGraph(provider: LLMProvider) {
       context,
     );
     return {
-      currentBatch: validateQuestionBatch(generated, state.knowledge),
+      currentBatch: assignProgramQuestionIds(
+        validateQuestionBatch(generated, state.knowledge),
+        state.sessionId,
+        1,
+      ),
     };
   };
 
@@ -182,7 +199,11 @@ function createCompletionGraph(provider: LLMProvider) {
       context,
     );
     return {
-      nextBatch: validateQuestionBatch(generated, state.knowledge),
+      nextBatch: assignProgramQuestionIds(
+        validateQuestionBatch(generated, state.knowledge),
+        state.sessionId,
+        state.batchNumber + 1,
+      ),
     };
   };
 

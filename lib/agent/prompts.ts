@@ -29,6 +29,16 @@ export function buildBatchGenerationPrompt(context: BatchGenerationContext): str
 - 题目必须围绕 focus 优先训练，同时覆盖当前 Knowledge 的规则。
 - 不要重复 previousQuestions 中已经出现的题目。
 - 题目要适合小学生，题干简洁明确。
+- 每道题必须包含且只包含以下字段：
+  - id：唯一字符串
+  - type："choice" 或 "true-false"
+  - question：题干字符串
+  - options：选择题必须提供字符串数组；判断题不要提供该字段
+  - answer：选择题为 options 中的字符串；判断题为 boolean
+  - explanation：简短中文解释，不能省略
+  - knowledgeId：当前 Knowledge id
+  - knowledgeSubtopic：当前 subtopic id
+  - difficulty：1 到 5 的整数
 
 Knowledge：
 ${serialize(context.knowledge)}
@@ -45,7 +55,7 @@ ${serialize({
   previousQuestions: context.previousQuestions.slice(-50),
 })}
 
-请返回一个仅包含 questions 数组的结构化结果。`;
+请只返回一个 JSON 对象，并且仅包含 questions 数组。`;
 }
 
 export function buildBatchAnalysisPrompt(context: BatchAnalysisContext): string {
@@ -54,10 +64,11 @@ export function buildBatchAnalysisPrompt(context: BatchAnalysisContext): string 
 规则：
 - action 只能是 continue 或 finish。
 - 如果学生仍需巩固，返回 continue；如果已经达到本 Knowledge 的阶段目标，返回 finish。
-- focus 必须使用 Knowledge 中合法的 subtopic id。
+- focus 必须是字符串数组，即使只有一个重点也必须使用数组；数组元素必须是 Knowledge 中合法的 subtopic id。
 - difficulty 必须是 1 到 5 的整数，并表示下一批建议难度。
 - reason 用简短中文解释判断依据。
 - 不判断单题对错，单题正确性已经由程序完成。
+- 必须返回包含 action、focus、difficulty、reason 四个字段的 JSON 对象。
 
 Knowledge：
 ${serialize(context.knowledge)}
@@ -73,7 +84,7 @@ ${serialize(context.questions)}
 
 当前批次序号：${context.batchNumber}
 
-请返回结构化 AgentDecision。`;
+请只返回 JSON 对象，并符合 AgentDecision 结构。`;
 }
 
 export function buildSessionSummaryPrompt(context: SessionSummaryContext): string {
@@ -81,10 +92,11 @@ export function buildSessionSummaryPrompt(context: SessionSummaryContext): strin
 
 要求：
 - mastery 是 0 到 100 的综合掌握度，不要使用固定的逐题加减公式。
-- strengths 和 weaknesses 用简短中文描述。
-- recommendedFocus 必须使用 Knowledge 中合法的 subtopic id。
+- strengths 和 weaknesses 必须是字符串数组，用简短中文描述。
+- recommendedFocus 必须是字符串数组，即使只有一个重点也必须使用数组；数组元素必须是 Knowledge 中合法的 subtopic id。
 - summary 用 1 到 2 句中文解释学生当前水平和下一步建议。
 - 必须根据整个 Session 的表现，而不是其中一道题。
+- 必须返回包含 mastery、strengths、weaknesses、recommendedFocus、summary 五个字段的 JSON 对象。
 
 Knowledge：
 ${serialize(context.knowledge)}
@@ -101,5 +113,5 @@ ${serialize(context.questions)}
 每批 AgentDecision：
 ${serialize(context.decisions)}
 
-请返回结构化 SessionSummary。`;
+请只返回 JSON 对象，并符合 SessionSummary 结构。`;
 }

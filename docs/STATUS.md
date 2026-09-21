@@ -183,14 +183,11 @@ interface AppStorage {
 - LocalStorage 持久化和旧数据迁移
 - 原有森林主题 UI 保留
 
-当前默认 Provider：
+当前 Provider 策略：
 
-```text
-mock
-```
-
-因此线上或本地在没有环境变量时会使用可重复的本地教学 Provider。
-生产环境如要使用真实模型，需配置 `LLM_PROVIDER=openai` 以及对应模型和 Key。
+- 未配置环境变量时，默认使用 `mock`。
+- 当前 `.env.local` 已配置 `deepseek` 和 `deepseek-v4-flash`。
+- 真实 DeepSeek Provider 已完成题目生成、Batch Analysis 和 SessionSummary 验证。
 
 ## 10. 测试状态
 
@@ -206,13 +203,15 @@ mock
 - Batch finish + SessionSummary 流程
 - Storage v2 初始结构
 - Legacy LocalStorage 迁移
+- DeepSeek `deepseek-v4-flash` JSON Object 模式
+- 真实模型的 continue / finish / SessionSummary 流程
 
 ## 11. 下一阶段
 
 最合理的下一阶段任务是：
 
-1. 配置并验证真实 OpenAI Provider 的结构化输出稳定性。
-2. 增加 Agent 生成题目的离线 eval 数据集，评估题目正确性、难度和 subtopic 覆盖。
-3. 增加 active Session 恢复能力，刷新或关闭页面后可继续同一 Session。
-4. 为真实模型增加请求超时、降级和错误重试策略。
+1. 建立 deepseek-v4-flash 题目生成离线 eval 数据集，评估题目正确性、难度和 subtopic 覆盖。
+2. 增加 active Session 恢复能力，刷新或关闭页面后可继续同一 Session。
+3. 为真实模型增加请求超时、失败提示和可选降级策略。
+4. 增加 API Key 缺失、无效、限流和网络异常的可观测日志。
 5. 在真实模型稳定后，再评估是否需要数据库和跨设备 LearningState。
