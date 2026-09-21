@@ -1,8 +1,8 @@
 import type {
-  AgentDecision,
   Knowledge,
   LearningState,
   SessionSummary,
+  TeachingStrategy,
 } from "@/types/agent";
 
 export interface MasteryMeta {
@@ -42,6 +42,7 @@ export function createInitialLearningState(
     weaknesses: [],
     currentDifficulty: 1,
     recommendedFocus: [],
+    strategyLevel: 1,
     summary: "还没有完成过一次学习 Session。",
     updatedAt,
   };
@@ -55,22 +56,24 @@ export function buildLearningStateFromSummary(
   current: LearningState,
   knowledge: Knowledge,
   summary: SessionSummary,
-  decisions: AgentDecision[],
+  strategies: TeachingStrategy[],
   updatedAt = Date.now(),
 ): LearningState {
   const validSubtopicIds = new Set(knowledge.subtopics.map((subtopic) => subtopic.id));
   const recommendedFocus = summary.recommendedFocus.filter((id) =>
     validSubtopicIds.has(id),
   );
-  const latestDecision = decisions.at(-1);
+  const latestStrategy = strategies.at(-1);
 
   return {
     ...current,
     mastery: clampMastery(summary.mastery),
     strengths: unique(summary.strengths),
     weaknesses: unique(summary.weaknesses),
-    currentDifficulty: latestDecision?.difficulty ?? current.currentDifficulty,
+    currentDifficulty:
+      latestStrategy?.difficulty ?? current.currentDifficulty,
     recommendedFocus,
+    strategyLevel: latestStrategy?.strategyLevel ?? current.strategyLevel,
     summary: summary.summary.trim(),
     updatedAt,
   };

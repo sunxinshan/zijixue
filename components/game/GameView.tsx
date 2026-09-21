@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnswerButton } from "@/components/game/AnswerButton";
 import { ForestBackdrop } from "@/components/shared/ForestBackdrop";
 import { ProgressBar } from "@/components/shared/ProgressBar";
+import { createBatchPerformance } from "@/lib/agent/analysis";
 import { completeAgentBatch, startAgentSession } from "@/lib/agent/client";
 import {
   createLocalId,
@@ -24,12 +25,13 @@ import {
   upsertSession,
 } from "@/lib/storage";
 import type {
-  AgentDecision,
   Attempt,
+  BatchPerformance,
   Knowledge,
   LearningSession,
   LearningState,
   QuestionBatch,
+  TeachingStrategy,
 } from "@/types/agent";
 
 type GameStatus =
@@ -70,10 +72,10 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [batchNumber, setBatchNumber] = useState(1);
   const [attempts, setAttempts] = useState<Attempt[]>([]);
-  const [decisions, setDecisions] = useState<AgentDecision[]>([]);
+  const [strategies, setStrategies] = useState<TeachingStrategy[]>([]);
+  const [pastBatches, setPastBatches] = useState<BatchPerformance[]>([]);
   const [previousQuestions, setPreviousQuestions] = useState<string[]>([]);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
-  const [continueReason, setContinueReason] = useState("");
 
   useEffect(() => {
     if (initialized.current) return;
@@ -96,6 +98,7 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
         setProvider(response.provider);
         setSession(response.session);
         setLearningState(response.learningState);
+        setStrategies([response.strategy]);
         setCurrentBatch(response.batch);
         setPreviousQuestions(
           response.batch.questions.map((question) => question.question),
@@ -159,6 +162,11 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
       const batchAttempts = attempts.filter((attempt) =>
         batchQuestionIds.has(attempt.questionId),
       );
+      const currentPerformance = createBatchPerformance(
+        batchNumber,
+        batchAttempts,
+        currentBatch.questions,
+      );
       const response = await completeAgentBatch({
         userId: session.userId,
         knowledge,
@@ -167,24 +175,25 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
         attempts: batchAttempts,
         currentBatch,
         batchNumber,
-        decisions,
+        pastBatches,
+        strategies,
         previousQuestions,
       });
 
       setLearningState(response.learningState);
-      const nextDecisions = [...decisions, response.decision];
-      setDecisions(nextDecisions);
+      const nextStrategies = [...strategies, response.strategy];
+      setStrategies(nextStrategies);
+      setPastBatches((current) => [...current, currentPerformance]);
       setPreviousQuestions((current) => [
         ...current,
         ...currentBatch.questions.map((question) => question.question),
       ]);
 
-      if (response.decision.action === "continue") {
+      if (response.strategy.action !== "finish") {
         if (!response.batch) throw new Error("Agent 未返回下一批题目");
         saveQuestions(response.batch.questions);
         setNextBatch(response.batch);
         setBatchNumber((current) => current + 1);
-        setContinueReason(response.decision.reason);
         setStatus("continue-ready");
         return;
       }
@@ -223,7 +232,6 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
     setNextBatch(null);
     setCurrentIndex(0);
     setFeedback(null);
-    setContinueReason("");
     setStatus("question");
   };
 
@@ -287,9 +295,9 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
   }
 
   if (status === "continue-ready") {
+    const latestStrategy = strategies.at(-1);
     const focusTitles =
-      decisions
-        .at(-1)
+      latestStrategy
         ?.focus.map(
           (id) =>
             knowledge.subtopics.find((subtopic) => subtopic.id === id)?.title,
@@ -307,8 +315,23 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
             Agent 建议继续练习
           </h1>
           <p className="mt-3 text-sm font-semibold leading-6 text-[#60786a]">
-            {continueReason}
+            {latestStrategy?.reason}
           </p>
+          {latestStrategy?.explanation ? (
+            <p className="mt-4 rounded-2xl bg-[#effbf0] px-4 py-3 text-sm font-semibold leading-6 text-[#277146]">
+              {latestStrategy.explanation}
+            </p>
+          ) : null}
+          {latestStrategy?.examples?.length ? (
+            <div className="mt-3 w-full rounded-2xl bg-[#f8fbf5] p-4 text-left">
+              <p className="text-xs font-black text-[#60786a]">示例</p>
+              <ul className="mt-2 space-y-1 text-sm font-bold text-[#315341]">
+                {latestStrategy.examples.map((example) => (
+                  <li key={example}>• {example}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
           {focusTitles.length > 0 ? (
             <p className="mt-4 rounded-2xl bg-[#fff5d4] px-4 py-3 text-sm font-black text-[#8a5a00]">
               下一批重点：{focusTitles.join("、")}
@@ -354,7 +377,7 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
 
       <main className="mx-auto mt-5 max-w-2xl">
         <div className="mb-2 flex justify-between text-xs font-black text-[#60786a]">
-          <span>{provider === "openai" ? "AI 教学引擎" : "演示教学引擎"}</span>
+          <span>{provider === "mock" ? "演示教学引擎" : "AI 教学引擎"}</span>
           <span>程序本地判分</span>
         </div>
         <ProgressBar
@@ -362,6 +385,22 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
           max={currentBatch.questions.length}
           tone="yellow"
         />
+
+        {strategies.at(-1)?.explanation && (strategies.at(-1)?.strategyLevel ?? 1) >= 3 ? (
+          <section className="mt-4 rounded-[1.5rem] bg-[#effbf0] p-4 ring-1 ring-[#b9e5c1]">
+            <p className="text-xs font-black tracking-wide text-[#2c8a56]">
+              本轮教学策略
+            </p>
+            <p className="mt-2 text-sm font-semibold leading-6 text-[#315341]">
+              {strategies.at(-1)?.explanation}
+            </p>
+            {strategies.at(-1)?.examples?.length ? (
+              <p className="mt-2 text-sm font-bold text-[#277146]">
+                {strategies.at(-1)?.examples?.join("　")}
+              </p>
+            ) : null}
+          </section>
+        ) : null}
 
         <section className="mt-5 rounded-[2rem] bg-white/95 p-5 shadow-[0_20px_55px_rgba(47,108,66,0.14)] ring-1 ring-white sm:p-7">
           <div className="flex flex-wrap items-center gap-2">

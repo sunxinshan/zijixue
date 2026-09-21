@@ -1,10 +1,11 @@
 import { z } from "zod";
 
 import {
-  agentDecisionPublicSchema,
   attemptSchema,
+  batchPerformanceSchema,
   learningStateSchema,
   questionBatchPublicSchema,
+  teachingStrategyPublicSchema,
 } from "@/lib/agent/validation";
 
 export const startSessionRequestSchema = z.object({
@@ -21,7 +22,8 @@ export const completeBatchRequestSchema = z.object({
   attempts: z.array(attemptSchema).length(10),
   currentBatch: questionBatchPublicSchema,
   batchNumber: z.number().int().min(1),
-  decisions: z.array(agentDecisionPublicSchema).default([]),
+  pastBatches: z.array(batchPerformanceSchema).default([]),
+  strategies: z.array(teachingStrategyPublicSchema).default([]),
   previousQuestions: z.array(z.string()).default([]),
 });
 

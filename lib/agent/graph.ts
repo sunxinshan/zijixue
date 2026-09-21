@@ -1,33 +1,35 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 
-import { createLLMProvider } from "@/lib/agent/provider";
+import { analyzeBatch, createInitialObservation } from "@/lib/agent/analysis";
 import type { LLMProvider } from "@/lib/agent/llm";
+import { createLLMProvider } from "@/lib/agent/provider";
 import {
-  buildBatchAnalysisPrompt,
   buildBatchGenerationPrompt,
   buildSessionSummaryPrompt,
+  buildTeachingStrategyPrompt,
 } from "@/lib/agent/prompts";
 import {
   AgentValidationError,
-  agentDecisionPublicSchema,
   questionBatchPublicSchema,
   sessionSummaryPublicSchema,
-  validateAgentDecision,
+  teachingStrategyPublicSchema,
   validateQuestionBatch,
   validateSessionSummary,
+  validateTeachingStrategy,
 } from "@/lib/agent/validation";
 import { createLocalId } from "@/lib/game";
 import { buildLearningStateFromSummary } from "@/lib/mastery";
 import type {
-  AgentDecision,
   Attempt,
-  BatchAnalysisContext,
   BatchGenerationContext,
+  BatchObservation,
+  BatchPerformance,
   Knowledge,
   LearningState,
   QuestionBatch,
   SessionSummary,
-  SessionSummaryContext,
+  StrategyGenerationContext,
+  TeachingStrategy,
 } from "@/types/agent";
 
 function replaceValue<T>(fallback: () => T) {
@@ -44,6 +46,12 @@ const StartGraphState = Annotation.Root({
   sessionId: Annotation<string>(
     replaceValue<string>(() => createLocalId("session")),
   ),
+  observation: Annotation<BatchObservation | null>(
+    replaceValue<BatchObservation | null>(() => null),
+  ),
+  strategy: Annotation<TeachingStrategy | null>(
+    replaceValue<TeachingStrategy | null>(() => null),
+  ),
   currentBatch: Annotation<QuestionBatch | null>(
     replaceValue<QuestionBatch | null>(() => null),
   ),
@@ -57,12 +65,18 @@ const CompletionGraphState = Annotation.Root({
   attempts: Annotation<Attempt[]>(),
   currentBatch: Annotation<QuestionBatch>(),
   batchNumber: Annotation<number>(),
-  decisions: Annotation<AgentDecision[]>(
-    replaceValue<AgentDecision[]>(() => []),
+  pastBatches: Annotation<BatchPerformance[]>(
+    replaceValue<BatchPerformance[]>(() => []),
+  ),
+  strategies: Annotation<TeachingStrategy[]>(
+    replaceValue<TeachingStrategy[]>(() => []),
   ),
   previousQuestions: Annotation<string[]>(replaceValue<string[]>(() => [])),
-  decision: Annotation<AgentDecision | null>(
-    replaceValue<AgentDecision | null>(() => null),
+  observation: Annotation<BatchObservation | null>(
+    replaceValue<BatchObservation | null>(() => null),
+  ),
+  strategy: Annotation<TeachingStrategy | null>(
+    replaceValue<TeachingStrategy | null>(() => null),
   ),
   nextBatch: Annotation<QuestionBatch | null>(
     replaceValue<QuestionBatch | null>(() => null),
@@ -88,6 +102,34 @@ function assignProgramQuestionIds(
   };
 }
 
+async function generateValidatedStrategy(
+  provider: LLMProvider,
+  context: StrategyGenerationContext,
+): Promise<TeachingStrategy> {
+  const generated = await provider.generate(
+    buildTeachingStrategyPrompt(context),
+    teachingStrategyPublicSchema,
+    context,
+  );
+  return validateTeachingStrategy(generated, context.knowledge);
+}
+
+async function generateValidatedBatch(
+  provider: LLMProvider,
+  context: BatchGenerationContext,
+): Promise<QuestionBatch> {
+  const generated = await provider.generate(
+    buildBatchGenerationPrompt(context),
+    questionBatchPublicSchema,
+    context,
+  );
+  return validateQuestionBatch(
+    generated,
+    context.knowledge,
+    context.strategy.questionDistribution,
+  );
+}
+
 function createStartGraph(provider: LLMProvider) {
   const loadContext = async (state: typeof StartGraphState.State) => {
     return {
@@ -99,24 +141,47 @@ function createStartGraph(provider: LLMProvider) {
     };
   };
 
-  const generateBatch = async (state: typeof StartGraphState.State) => {
-    const context: BatchGenerationContext = {
-      task: "generate_batch",
+  const analyzeLearningState = async () => {
+    return {
+      observation: createInitialObservation(),
+    };
+  };
+
+  const generateTeachingStrategy = async (
+    state: typeof StartGraphState.State,
+  ) => {
+    if (!state.observation) {
+      throw new AgentValidationError("start graph 缺少 initial observation");
+    }
+    const context: StrategyGenerationContext = {
+      task: "generate_teaching_strategy",
       knowledge: state.knowledge,
       learningState: state.learningState,
-      focus: state.learningState.recommendedFocus,
-      difficulty: state.learningState.currentDifficulty,
+      observation: state.observation,
+    };
+    return {
+      strategy: await generateValidatedStrategy(provider, context),
+    };
+  };
+
+  const generateQuestionBatch = async (
+    state: typeof StartGraphState.State,
+  ) => {
+    if (!state.strategy) {
+      throw new AgentValidationError("start graph 缺少 TeachingStrategy");
+    }
+    const context: BatchGenerationContext = {
+      task: "generate_question_batch",
+      knowledge: state.knowledge,
+      learningState: state.learningState,
+      strategy: state.strategy,
       batchNumber: 1,
       previousQuestions: [],
     };
-    const generated = await provider.generate(
-      buildBatchGenerationPrompt(context),
-      questionBatchPublicSchema,
-      context,
-    );
+    const validated = await generateValidatedBatch(provider, context);
     return {
       currentBatch: assignProgramQuestionIds(
-        validateQuestionBatch(generated, state.knowledge),
+        validated,
         state.sessionId,
         1,
       ),
@@ -125,10 +190,14 @@ function createStartGraph(provider: LLMProvider) {
 
   return new StateGraph(StartGraphState)
     .addNode("load_context", loadContext)
-    .addNode("generate_batch", generateBatch)
+    .addNode("analyze_learning_state", analyzeLearningState)
+    .addNode("generate_teaching_strategy", generateTeachingStrategy)
+    .addNode("generate_question_batch", generateQuestionBatch)
     .addEdge(START, "load_context")
-    .addEdge("load_context", "generate_batch")
-    .addEdge("generate_batch", END)
+    .addEdge("load_context", "analyze_learning_state")
+    .addEdge("analyze_learning_state", "generate_teaching_strategy")
+    .addEdge("generate_teaching_strategy", "generate_question_batch")
+    .addEdge("generate_question_batch", END)
     .compile();
 }
 
@@ -158,49 +227,55 @@ function createCompletionGraph(provider: LLMProvider) {
     return {};
   };
 
-  const analyzeBatch = async (state: typeof CompletionGraphState.State) => {
-    const context: BatchAnalysisContext = {
-      task: "analyze_batch",
+  const analyzeBatchNode = async (
+    state: typeof CompletionGraphState.State,
+  ) => {
+    return {
+      observation: analyzeBatch({
+        batchNumber: state.batchNumber,
+        attempts: state.attempts,
+        currentBatch: state.currentBatch,
+        pastBatches: state.pastBatches,
+        previousStrategies: state.strategies,
+      }),
+    };
+  };
+
+  const generateTeachingStrategy = async (
+    state: typeof CompletionGraphState.State,
+  ) => {
+    if (!state.observation) {
+      throw new AgentValidationError("completion graph 缺少 BatchObservation");
+    }
+    const context: StrategyGenerationContext = {
+      task: "generate_teaching_strategy",
       knowledge: state.knowledge,
       learningState: state.learningState,
-      attempts: state.attempts,
-      questions: state.currentBatch.questions,
-      batchNumber: state.batchNumber,
+      observation: state.observation,
     };
-    const decision = await provider.generate(
-      buildBatchAnalysisPrompt(context),
-      agentDecisionPublicSchema,
-      context,
-    );
     return {
-      decision: validateAgentDecision(decision, state.knowledge),
+      strategy: await generateValidatedStrategy(provider, context),
     };
   };
 
   const generateNextBatch = async (
     state: typeof CompletionGraphState.State,
   ) => {
-    if (!state.decision) {
-      throw new AgentValidationError("generate_batch 缺少 AgentDecision");
+    if (!state.strategy) {
+      throw new AgentValidationError("generate_question_batch 缺少 TeachingStrategy");
     }
-
     const context: BatchGenerationContext = {
-      task: "generate_batch",
+      task: "generate_question_batch",
       knowledge: state.knowledge,
       learningState: state.learningState,
-      focus: state.decision.focus,
-      difficulty: state.decision.difficulty,
+      strategy: state.strategy,
       batchNumber: state.batchNumber + 1,
       previousQuestions: state.previousQuestions,
     };
-    const generated = await provider.generate(
-      buildBatchGenerationPrompt(context),
-      questionBatchPublicSchema,
-      context,
-    );
+    const validated = await generateValidatedBatch(provider, context);
     return {
       nextBatch: assignProgramQuestionIds(
-        validateQuestionBatch(generated, state.knowledge),
+        validated,
         state.sessionId,
         state.batchNumber + 1,
       ),
@@ -210,62 +285,62 @@ function createCompletionGraph(provider: LLMProvider) {
   const summarizeSession = async (
     state: typeof CompletionGraphState.State,
   ) => {
-    if (!state.decision) {
-      throw new AgentValidationError("summarize_session 缺少 AgentDecision");
+    if (!state.strategy) {
+      throw new AgentValidationError("summarize_session 缺少 TeachingStrategy");
     }
-
-    const context: SessionSummaryContext = {
-      task: "summarize_session",
+    const context = {
+      task: "summarize_session" as const,
       knowledge: state.knowledge,
       learningState: state.learningState,
       attempts: state.attempts,
       questions: state.currentBatch.questions,
-      decisions: [...state.decisions, state.decision],
+      strategies: [...state.strategies, state.strategy],
     };
-    const summary = await provider.generate(
+    const generated = await provider.generate(
       buildSessionSummaryPrompt(context),
       sessionSummaryPublicSchema,
       context,
     );
     return {
-      sessionSummary: validateSessionSummary(summary, state.knowledge),
+      sessionSummary: validateSessionSummary(generated, state.knowledge),
     };
   };
 
   const saveLearningState = async (
     state: typeof CompletionGraphState.State,
   ) => {
-    if (!state.sessionSummary) {
-      throw new AgentValidationError("save_learning_state 缺少 SessionSummary");
+    if (!state.sessionSummary || !state.strategy) {
+      throw new AgentValidationError("save_learning_state 缺少 Summary 或 Strategy");
     }
-
     return {
       updatedLearningState: buildLearningStateFromSummary(
         state.learningState,
         state.knowledge,
         state.sessionSummary,
-        state.decisions.concat(state.decision ? [state.decision] : []),
+        [...state.strategies, state.strategy],
       ),
     };
   };
 
   return new StateGraph(CompletionGraphState)
     .addNode("record_attempt", recordAttempt)
-    .addNode("analyze_batch", analyzeBatch)
-    .addNode("generate_next_batch", generateNextBatch)
+    .addNode("analyze_batch", analyzeBatchNode)
+    .addNode("generate_teaching_strategy", generateTeachingStrategy)
+    .addNode("generate_question_batch", generateNextBatch)
     .addNode("summarize_session", summarizeSession)
     .addNode("save_learning_state", saveLearningState)
     .addEdge(START, "record_attempt")
     .addEdge("record_attempt", "analyze_batch")
+    .addEdge("analyze_batch", "generate_teaching_strategy")
     .addConditionalEdges(
-      "analyze_batch",
-      (state) => (state.decision?.action === "continue" ? "continue" : "finish"),
+      "generate_teaching_strategy",
+      (state) => (state.strategy?.action === "finish" ? "finish" : "continue"),
       {
-        continue: "generate_next_batch",
+        continue: "generate_question_batch",
         finish: "summarize_session",
       },
     )
-    .addEdge("generate_next_batch", END)
+    .addEdge("generate_question_batch", END)
     .addEdge("summarize_session", "save_learning_state")
     .addEdge("save_learning_state", END)
     .compile();
@@ -284,14 +359,15 @@ export async function runStartSessionGraph(
   const graph = createStartGraph(provider);
   const result = await graph.invoke(input);
 
-  if (!result.currentBatch) {
-    throw new AgentValidationError("generate_batch 未返回题目");
+  if (!result.strategy || !result.currentBatch) {
+    throw new AgentValidationError("start graph 未返回策略或题目");
   }
 
   return {
     provider: provider.kind,
     sessionId: result.sessionId,
     learningState: result.learningState,
+    strategy: result.strategy,
     batch: result.currentBatch,
   };
 }
@@ -304,7 +380,8 @@ export interface CompleteBatchGraphInput {
   attempts: Attempt[];
   currentBatch: QuestionBatch;
   batchNumber: number;
-  decisions: AgentDecision[];
+  pastBatches: BatchPerformance[];
+  strategies: TeachingStrategy[];
   previousQuestions: string[];
 }
 
@@ -315,13 +392,13 @@ export async function runCompleteBatchGraph(
   const graph = createCompletionGraph(provider);
   const result = await graph.invoke(input);
 
-  if (!result.decision) {
-    throw new AgentValidationError("analyze_batch 未返回决策");
+  if (!result.strategy) {
+    throw new AgentValidationError("completion graph 未返回 TeachingStrategy");
   }
 
   return {
     provider: provider.kind,
-    decision: result.decision,
+    strategy: result.strategy,
     batch: result.nextBatch ?? undefined,
     sessionSummary: result.sessionSummary ?? undefined,
     learningState: result.updatedLearningState ?? result.learningState,

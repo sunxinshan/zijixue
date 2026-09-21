@@ -8,14 +8,15 @@ import {
   getMasteryMeta,
 } from "@/lib/mastery";
 
-test("LearningState 初值为空，不使用固定逐题加减公式", () => {
+test("LearningState 初值包含 strategyLevel，不使用固定逐题加减公式", () => {
   const state = createInitialLearningState("local-user", "comparative", 1);
   assert.equal(state.mastery, 0);
   assert.equal(state.currentDifficulty, 1);
+  assert.equal(state.strategyLevel, 1);
   assert.deepEqual(state.strengths, []);
 });
 
-test("Agent SessionSummary 更新长期 LearningState", () => {
+test("Agent SessionSummary 和最终 TeachingStrategy 更新 LearningState", () => {
   const current = createInitialLearningState("local-user", "comparative", 1);
   const next = buildLearningStateFromSummary(
     current,
@@ -29,10 +30,18 @@ test("Agent SessionSummary 更新长期 LearningState", () => {
     },
     [
       {
-        action: "finish",
+        diagnosis: "persistent_failure",
+        strategyLevel: 4,
+        action: "change_strategy",
         focus: ["y-ending"],
         difficulty: 3,
-        reason: "需要巩固。",
+        questionDistribution: [
+          { subtopic: "y-ending", count: 6 },
+          { subtopic: "regular", count: 4 },
+        ],
+        explanation: "重新解释 y 结尾变化。",
+        examples: ["happy → happier → happiest"],
+        reason: "连续多个 batch 失败。",
       },
     ],
     10,
@@ -40,6 +49,7 @@ test("Agent SessionSummary 更新长期 LearningState", () => {
 
   assert.equal(next.mastery, 78);
   assert.equal(next.currentDifficulty, 3);
+  assert.equal(next.strategyLevel, 4);
   assert.deepEqual(next.recommendedFocus, ["y-ending"]);
   assert.equal(next.updatedAt, 10);
 });

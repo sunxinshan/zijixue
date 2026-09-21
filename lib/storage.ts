@@ -68,6 +68,7 @@ export function migrateLegacyStorage(raw: string): AppStorage | null {
                 weaknesses: [],
                 currentDifficulty: 1,
                 recommendedFocus: [],
+                strategyLevel: 1,
                 summary: "由旧版固定掌握度迁移，下一次 Agent Session 会重新评估。",
                 updatedAt: Date.now(),
               },
@@ -94,7 +95,10 @@ function parseAgentStorage(raw: string | null): AppStorage {
       version: 2,
       userId: parsed.userId ?? "local-user",
       learningStates: Array.isArray(parsed.learningStates)
-        ? parsed.learningStates
+        ? parsed.learningStates.map((state) => ({
+            ...state,
+            strategyLevel: state.strategyLevel ?? 1,
+          }))
         : [],
       sessions: Array.isArray(parsed.sessions) ? parsed.sessions : [],
       attempts: Array.isArray(parsed.attempts) ? parsed.attempts : [],

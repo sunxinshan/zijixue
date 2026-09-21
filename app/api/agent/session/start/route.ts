@@ -44,6 +44,7 @@ export async function POST(request: Request) {
       provider: result.provider,
       session,
       learningState: result.learningState,
+      strategy: result.strategy,
       batch: result.batch,
     });
   } catch (error) {

@@ -13,21 +13,17 @@
 核心模式：
 
 ```text
-学习知识
+孩子答题
  ↓
-Agent 教学
+程序记录客观事实
  ↓
-生成练习
+Agent 诊断学习状态
  ↓
-学生答题
+选择教学策略
  ↓
-程序判定
+生成下一批题
  ↓
-Agent 分析
- ↓
-针对性训练
- ↓
-掌握
+再次评估
 ```
 
 ## 2. 当前技术栈
@@ -43,14 +39,8 @@ LangGraph
 LangChain Core / OpenAI
 Zod
 LocalStorage
+DeepSeek deepseek-v4-flash
 ```
-
-暂时不使用：
-
-- SQLite
-- PostgreSQL
-- MySQL
-- 用户登录系统
 
 ## 3. 项目文档
 
@@ -61,8 +51,12 @@ docs/
 ├── TECH.md
 ├── CONTENT.md
 ├── AGENT.md
+├── AGENT_v1.md
 ├── DATA.md
-└── STATUS.md
+├── STATUS.md
+├── CODEX-PROMPT.md
+├── CODEX-PROMPT-v1.md
+└── AGENT_v1.md
 ```
 
 ## 4. 当前架构
@@ -70,79 +64,108 @@ docs/
 - `Comparative` 是唯一 Knowledge / Level。
 - `regular`、`e-ending`、`y-ending`、`double-consonant`、`irregular` 是 subtopic。
 - 每次进入 Game 页面会创建新的 LearningSession。
-- 新 Session 使用新的 Agent Context，只读取对应 Knowledge 的 LearningState。
+- Session 使用新的 Agent Context，只读取当前 Knowledge 的 LearningState。
 - 固定 Question Selector 已移除。
 - 固定 mastery 加减公式已移除。
 
-## 5. Agent 流程
+## 5. TeachingStrategy v1
 
-LangGraph 当前分为两阶段，以 HTTP 边界表示 `WAIT_FOR_USER`：
+已实现七类诊断：
 
-启动阶段：
+- accidental
+- subtopic_weakness
+- rule_misunderstanding
+- multiple_weaknesses
+- persistent_failure
+- improving
+- mastered
+
+已实现五级教学策略：
+
+1. 正常练习
+2. 针对性练习
+3. 解释 + 示例 + 简单练习
+4. 改变教学方式
+5. 综合验证 / 结束
+
+TeachingStrategy 包含：
+
+```ts
+{
+  diagnosis,
+  strategyLevel,
+  action,
+  focus,
+  difficulty,
+  questionDistribution,
+  explanation?,
+  examples?,
+  reason
+}
+```
+
+`questionDistribution` 总数必须为 10，且每个 subtopic 必须属于当前 Knowledge。
+
+## 6. persistent_failure
+
+同一 subtopic 连续多个 batch 低准确率时：
+
+- diagnosis 升级为 `persistent_failure`
+- strategyLevel 至少为 4
+- action 必须为 `simplify`、`change_strategy` 或 `explain`
+- 必须提供 explanation 和 examples
+- 可以减少干扰项、降低难度、更换题型、使用正反例和拆分问题
+
+## 7. LangGraph 流程
+
+启动：
 
 ```text
 START
 → load_context
-→ generate_batch
+→ analyze_learning_state
+→ generate_teaching_strategy
+→ generate_question_batch
 → END
 ```
 
-一批答题完成后：
+每批完成：
 
 ```text
 START
 → record_attempt
-→ analyze_batch
-→ continue ? generate_next_batch
-           : summarize_session
-             → save_learning_state
-→ END
+→ analyze_batch（程序客观统计）
+→ generate_teaching_strategy（Agent 诊断）
+→ finish ? summarize_session → save_learning_state → END
+         : generate_question_batch → END
 ```
 
-程序在浏览器本地逐题判分，并在每道题回答后记录 Attempt。
-只有每批 10 道题完成后才调用一次 Agent 分析。
+程序负责答案判定和 Attempt 事实记录。Agent 负责诊断、策略和题目生成。
 
-## 6. LLM Provider
+## 8. Question 和 Validation
 
-已实现：
+每批正好 10 道题，只支持：
 
-```ts
-interface LLMProvider {
-  generate<T>(
-    prompt: string,
-    schema: z.ZodType<T>,
-    context?: unknown
-  ): Promise<T>;
-}
-```
-
-支持：
-
-- `mock`：默认本地演示 Provider，不需要 API Key。
-- `openai`：通过 `@langchain/openai` 调用，支持 `LLM_MODEL`、`LLM_API_KEY` 和可选 `LLM_BASE_URL`。
-- `deepseek`：通过 OpenAI 兼容接口调用；默认 Base URL 为 `https://api.deepseek.com/v1`，模型由 `LLM_MODEL` 指定。
-
-OpenAI API Key 不会发送到浏览器。
-
-## 7. Question 和 Validation
-
-MVP 每批正好 10 道题，仅支持：
-
-- `choice`
-- `true-false`
+- choice
+- true-false
 
 Validator 校验：
 
-- 数量必须为 10
-- 题型合法
+- 10 道题
+- 类型合法
 - choice 的 options 和 answer 合法
-- true-false 的 answer 为 boolean
-- knowledgeId 属于当前 Knowledge
-- knowledgeSubtopic 属于当前 Knowledge
+- true-false answer 为 boolean
+- knowledgeId 正确
+- subtopic 合法
+- questionDistribution 每个 subtopic 范围合法
+- questionDistribution 总数必须为 10，finish 时必须为空
+- 实际题目分布必须与 TeachingStrategy 一致
 - difficulty 为 1 到 5
 - 题目 ID 和题干不重复
+- strategyLevel 3 以上必须提供 explanation 和 examples
+- persistent_failure 必须升级 strategyLevel 并改变教学方式
 
-## 8. 当前 Storage
+## 9. 当前 Storage
 
 LocalStorage 统一 Key：
 
@@ -163,55 +186,73 @@ interface AppStorage {
 }
 ```
 
-旧版 `english-forest:v1` 的 mastery、XP 和星星会在首次读取时迁移。
+LearningState 已包含：
 
-## 9. 当前完成状态
+- mastery
+- strengths
+- weaknesses
+- currentDifficulty
+- recommendedFocus
+- strategyLevel
+- summary
+- updatedAt
 
-已跑通：
+旧版 LocalStorage 数据会迁移。
 
-- Knowledge = Level
-- subtopic 数据模型
-- LearningSession
-- LangGraph 两阶段流程
-- 动态生成 10 道 choice / true-false
-- 程序本地判分
-- Attempt 逐题记录
-- Batch Analysis
-- continue 后生成下一批针对性题目
-- finish 后生成 SessionSummary
+## 10. LLM Provider
+
+支持：
+
+- `mock`：无需 API Key，用于测试和离线运行。
+- `openai`：OpenAI 结构化输出。
+- `deepseek`：OpenAI 兼容 JSON Object 模式。
+
+当前本地 `.env.local` 使用：
+
+```env
+LLM_PROVIDER=deepseek
+LLM_MODEL=deepseek-v4-flash
+LLM_BASE_URL=https://api.deepseek.com/v1
+```
+
+API Key 只存在于服务端环境变量，不会进入浏览器。
+
+## 11. 测试状态
+
+自动化测试覆盖：
+
+- A：9/10，错误分散 → accidental
+- B：6/10，y-ending 集中错误 → subtopic_weakness + 提高占比
+- C：连续 y-ending 错误 → rule_misunderstanding + explain + examples
+- D：两个 batch y-ending 失败 → persistent_failure + strategyLevel 4
+- E：6/10 → 8/10 → 9/10 → improving + 提高难度
+- F：多个 batch 稳定正确 → mastered + finish
+- questionDistribution 总数校验
+- LangGraph 启动、continue、finish
 - SessionSummary 更新 LearningState
-- LocalStorage 持久化和旧数据迁移
-- 原有森林主题 UI 保留
+- Storage v2 与旧数据迁移
+- DeepSeek Provider 配置
 
-当前 Provider 策略：
+真实 DeepSeek 验证：
 
-- 未配置环境变量时，默认使用 `mock`。
-- 当前 `.env.local` 已配置 `deepseek` 和 `deepseek-v4-flash`。
-- 真实 DeepSeek Provider 已完成题目生成、Batch Analysis 和 SessionSummary 验证。
+- 生成 10 道题和 questionDistribution
+- 识别 y-ending 和 double-consonant 的集中错误
+- 输出 explanation 和规范化 examples
+- 生成下一批 10 道针对性题目
 
-## 10. 测试状态
+## 12. 当前限制
 
-当前自动化测试覆盖：
+- active Session 暂不支持刷新后继续。
+- 没有真实用户数据驱动的长期 evaluator。
+- DeepSeek 返回格式仍可能需要根据 Prompt 版本继续加固。
+- 没有请求超时、自动重试和自动降级策略。
+- LocalStorage 仍是唯一持久化方式。
+- 线上 `yidongxun.com` 尚未部署该 v1 版本。
 
-- Knowledge / subtopic 数据
-- choice / true-false 本地判分
-- LearningState 更新
-- Mock Provider 题目生成
-- Question Validator
-- LangGraph start 流程
-- Batch continue 流程
-- Batch finish + SessionSummary 流程
-- Storage v2 初始结构
-- Legacy LocalStorage 迁移
-- DeepSeek `deepseek-v4-flash` JSON Object 模式
-- 真实模型的 continue / finish / SessionSummary 流程
+## 13. 下一步
 
-## 11. 下一阶段
-
-最合理的下一阶段任务是：
-
-1. 建立 deepseek-v4-flash 题目生成离线 eval 数据集，评估题目正确性、难度和 subtopic 覆盖。
-2. 增加 active Session 恢复能力，刷新或关闭页面后可继续同一 Session。
-3. 为真实模型增加请求超时、失败提示和可选降级策略。
-4. 增加 API Key 缺失、无效、限流和网络异常的可观测日志。
-5. 在真实模型稳定后，再评估是否需要数据库和跨设备 LearningState。
+1. 增加 active Session 恢复。
+2. 建立 A～F 之外的真实模型回归 eval。
+3. 为 DeepSeek 增加超时、失败重试和降级到 mock 的可选策略。
+4. 增强 UI 对教学策略历史的展示。
+5. 验证后部署到 `yidongxun.com`。

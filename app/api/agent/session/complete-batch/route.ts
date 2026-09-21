@@ -31,7 +31,8 @@ export async function POST(request: Request) {
       attempts: input.attempts,
       currentBatch: input.currentBatch,
       batchNumber: input.batchNumber,
-      decisions: input.decisions,
+      pastBatches: input.pastBatches,
+      strategies: input.strategies,
       previousQuestions: input.previousQuestions,
     });
 

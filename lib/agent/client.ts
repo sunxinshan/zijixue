@@ -1,23 +1,25 @@
 import type {
-  AgentDecision,
   Attempt,
+  BatchPerformance,
   Knowledge,
   LearningSession,
   LearningState,
   QuestionBatch,
   SessionSummary,
+  TeachingStrategy,
 } from "@/types/agent";
 
 interface StartSessionResponse {
   provider: string;
   session: LearningSession;
   learningState: LearningState;
+  strategy: TeachingStrategy;
   batch: QuestionBatch;
 }
 
 interface CompleteBatchResponse {
   provider: string;
-  decision: AgentDecision;
+  strategy: TeachingStrategy;
   batch?: QuestionBatch;
   sessionSummary?: SessionSummary;
   learningState: LearningState;
@@ -57,7 +59,8 @@ export function completeAgentBatch(input: {
   attempts: Attempt[];
   currentBatch: QuestionBatch;
   batchNumber: number;
-  decisions: AgentDecision[];
+  pastBatches: BatchPerformance[];
+  strategies: TeachingStrategy[];
   previousQuestions: string[];
 }) {
   return postJson<CompleteBatchResponse>(
@@ -70,7 +73,8 @@ export function completeAgentBatch(input: {
       attempts: input.attempts,
       currentBatch: input.currentBatch,
       batchNumber: input.batchNumber,
-      decisions: input.decisions,
+      pastBatches: input.pastBatches,
+      strategies: input.strategies,
       previousQuestions: input.previousQuestions,
     },
   );

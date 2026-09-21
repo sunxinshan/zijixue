@@ -1,7 +1,26 @@
 export type QuestionType = "choice" | "true-false";
 export type Difficulty = 1 | 2 | 3 | 4 | 5;
-export type AgentAction = "continue" | "finish";
+export type StrategyLevel = 1 | 2 | 3 | 4 | 5;
 export type SessionStatus = "active" | "completed";
+
+export type Diagnosis =
+  | "accidental"
+  | "subtopic_weakness"
+  | "rule_misunderstanding"
+  | "multiple_weaknesses"
+  | "persistent_failure"
+  | "improving"
+  | "mastered";
+
+export type StrategyAction =
+  | "continue"
+  | "targeted_practice"
+  | "explain"
+  | "simplify"
+  | "change_strategy"
+  | "increase_difficulty"
+  | "mixed_review"
+  | "finish";
 
 export interface KnowledgeExample {
   id: string;
@@ -58,11 +77,44 @@ export interface Attempt {
   timestamp: number;
 }
 
-export interface AgentDecision {
-  action: AgentAction;
+export interface QuestionDistributionItem {
+  subtopic: string;
+  count: number;
+}
+
+export interface TeachingStrategy {
+  diagnosis: Diagnosis;
+  strategyLevel: StrategyLevel;
+  action: StrategyAction;
   focus: string[];
   difficulty: Difficulty;
+  questionDistribution: QuestionDistributionItem[];
+  explanation?: string;
+  examples?: string[];
   reason: string;
+}
+
+export interface SubtopicPerformance {
+  subtopic: string;
+  correct: number;
+  total: number;
+  accuracy: number;
+}
+
+export interface BatchPerformance {
+  batchNumber: number;
+  total: number;
+  correct: number;
+  accuracy: number;
+  subtopicStats: SubtopicPerformance[];
+}
+
+export interface BatchObservation {
+  batchNumber: number;
+  currentBatch: BatchPerformance;
+  pastBatches: BatchPerformance[];
+  previousStrategies: TeachingStrategy[];
+  consecutiveSubtopicErrors: Record<string, number>;
 }
 
 export interface SessionSummary {
@@ -81,6 +133,7 @@ export interface LearningState {
   weaknesses: string[];
   currentDifficulty: Difficulty;
   recommendedFocus: string[];
+  strategyLevel: StrategyLevel;
   summary: string;
   updatedAt: number;
 }
@@ -105,7 +158,7 @@ export interface SessionState {
   currentQuestionIndex?: number;
   lastAnswer?: string | boolean;
   isCorrect?: boolean;
-  decisions: AgentDecision[];
+  strategies: TeachingStrategy[];
   sessionSummary?: SessionSummary;
 }
 
@@ -120,23 +173,26 @@ export interface AppStorage {
   legacyStars?: number;
 }
 
-export interface BatchGenerationContext {
-  task: "generate_batch";
+export interface LearningAnalysisContext {
+  task: "analyze_learning_state";
   knowledge: Knowledge;
   learningState: LearningState;
-  focus: string[];
-  difficulty: Difficulty;
-  batchNumber: number;
-  previousQuestions: string[];
 }
 
-export interface BatchAnalysisContext {
-  task: "analyze_batch";
+export interface StrategyGenerationContext {
+  task: "generate_teaching_strategy";
   knowledge: Knowledge;
   learningState: LearningState;
-  attempts: Attempt[];
-  questions: Question[];
+  observation: BatchObservation;
+}
+
+export interface BatchGenerationContext {
+  task: "generate_question_batch";
+  knowledge: Knowledge;
+  learningState: LearningState;
+  strategy: TeachingStrategy;
   batchNumber: number;
+  previousQuestions: string[];
 }
 
 export interface SessionSummaryContext {
@@ -145,5 +201,5 @@ export interface SessionSummaryContext {
   learningState: LearningState;
   attempts: Attempt[];
   questions: Question[];
-  decisions: AgentDecision[];
+  strategies: TeachingStrategy[];
 }
