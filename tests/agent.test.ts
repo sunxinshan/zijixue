@@ -290,3 +290,56 @@ test("deepseek Provider 使用可配置模型和兼容接口", () => {
   if (previous.baseUrl === undefined) delete process.env.LLM_BASE_URL;
   else process.env.LLM_BASE_URL = previous.baseUrl;
 });
+
+test("选择题正确选项位置在 ABCD 中均衡随机", async () => {
+  const { randomizeChoiceOptionPositions } = await import(
+    "@/lib/agent/question-options"
+  );
+  const questions = Array.from({ length: 16 }, (_, index) => ({
+    id: `choice-${index}`,
+    type: "choice" as const,
+    question: `question ${index}`,
+    options: ["correct", "wrong-1", "wrong-2", "wrong-3"],
+    answer: "correct",
+    explanation: "test",
+    knowledgeId: "comparative",
+    knowledgeSubtopic: "regular",
+    difficulty: 1 as const,
+  }));
+  const trueFalse = {
+    id: "tf-1",
+    type: "true-false" as const,
+    question: "test true false",
+    answer: true,
+    explanation: "test",
+    knowledgeId: "comparative",
+    knowledgeSubtopic: "regular",
+    difficulty: 1 as const,
+  };
+
+  const randomized = randomizeChoiceOptionPositions(
+    { questions: [...questions, trueFalse] },
+    () => 0,
+  );
+  const positions = randomized.questions
+    .filter((question) => question.type === "choice")
+    .map((question) => question.options?.indexOf("correct"));
+
+  assert.deepEqual(
+    [0, 1, 2, 3].map(
+      (position) => positions.filter((value) => value === position).length,
+    ),
+    [4, 4, 4, 4],
+  );
+  assert.ok(
+    randomized.questions.every(
+      (question) =>
+        question.options?.length === undefined ||
+        new Set(question.options).size === 4,
+    ),
+  );
+  assert.equal(
+    randomized.questions.find((question) => question.id === "tf-1")?.options,
+    undefined,
+  );
+});

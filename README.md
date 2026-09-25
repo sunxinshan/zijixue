@@ -65,6 +65,10 @@ continue / finish
 - DeepSeek `deepseek-v4-flash`
 
 
+## 选项位置随机化
+
+选择题生成后由程序重新排列 options，确保正确答案在 A/B/C/D 中分布均衡。
+
 ## Baseline Question Cache
 
 当某个 Knowledge 的 LearningState 为空时，服务器会首次生成并缓存 15 道基线题。后续空状态请求复用该题库，不重复调用模型。

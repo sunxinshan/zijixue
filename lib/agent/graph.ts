@@ -23,6 +23,7 @@ import {
   validateTeachingStrategy,
 } from "@/lib/agent/validation";
 import { createLocalId, QUESTIONS_PER_BATCH } from "@/lib/game";
+import { randomizeChoiceOptionPositions } from "@/lib/agent/question-options";
 import { buildLearningStateFromSummary } from "@/lib/mastery";
 import type {
   Attempt,
@@ -132,11 +133,12 @@ async function generateValidatedBatch(
     questionBatchPublicSchema,
     context,
   );
-  return validateQuestionBatch(
+  const validated = validateQuestionBatch(
     generated,
     context.knowledge,
     context.strategy.questionDistribution,
   );
+  return randomizeChoiceOptionPositions(validated);
 }
 
 function createStartGraph(

@@ -2,6 +2,7 @@ import { createFileBaselineStore, type BaselineQuestionStore } from "@/lib/agent
 import type { LLMProvider } from "@/lib/agent/llm";
 import { QUESTIONS_PER_BATCH } from "@/lib/game";
 import { buildBatchGenerationPrompt } from "@/lib/agent/prompts";
+import { randomizeChoiceOptionPositions } from "@/lib/agent/question-options";
 import {
   questionBatchPublicSchema,
   validateQuestionBatch,
@@ -144,7 +145,7 @@ export async function getOrCreateBaselineBatch(input: {
     await store.get(input.knowledge.id),
     input.knowledge,
   );
-  if (existing) return existing;
+  if (existing) return randomizeChoiceOptionPositions(existing);
 
   const pendingKey = input.knowledge.id;
   const current = pending.get(pendingKey);
@@ -153,7 +154,7 @@ export async function getOrCreateBaselineBatch(input: {
   const task = generateBaselineBatch(input.knowledge, input.provider)
     .then(async (batch) => {
       await store.save(input.knowledge.id, batch);
-      return batch;
+      return randomizeChoiceOptionPositions(batch);
     })
     .finally(() => {
       pending.delete(pendingKey);

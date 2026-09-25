@@ -162,6 +162,7 @@ Validator 校验：
 - 实际题目分布必须与 TeachingStrategy 一致
 - difficulty 为 1 到 5
 - 题目 ID 和题干不重复
+- 选择题正确选项位置由程序均衡随机化
 - strategyLevel 3 以上必须提供 explanation 和 examples
 - persistent_failure 必须升级 strategyLevel 并改变教学方式
 
@@ -246,6 +247,7 @@ API Key 只存在于服务端环境变量，不会进入浏览器。
 - SessionSummary 更新 LearningState
 - Storage v2 与旧数据迁移
 - DeepSeek Provider 配置
+- 选择题正确选项位置 A/B/C/D 均衡随机
 
 真实 DeepSeek 验证：
 

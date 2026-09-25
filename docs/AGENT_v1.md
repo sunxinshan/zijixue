@@ -120,6 +120,10 @@ interface TeachingStrategy {
 - 不允许越过当前 Level
 - 程序必须校验 Agent 输出
 
+- 选择题生成后，程序必须重新随机化 options 顺序。
+- 正确答案位置在 A/B/C/D 中应尽量均衡，不能长期集中在第一个选项。
+- 随机化只改变选项顺序，不改变正确答案、题型或 subtopic。
+
 
 ## 4.1 Baseline Question Cache
 

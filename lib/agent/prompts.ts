@@ -65,6 +65,7 @@ export function buildBatchGenerationPrompt(context: BatchGenerationContext): str
 - knowledgeSubtopic 只能使用当前 Knowledge 的合法 subtopic id。
 - 必须严格符合 questionDistribution 中每个 subtopic 的 count。
 - choice 的 answer 必须是 options 中的字符串。
+- 正确答案不要总放在第一个位置，A/B/C/D 分布应尽量随机。
 - true-false 的 answer 必须是布尔值。
 - difficulty 必须是 1 到 5 的整数。
 - 不要重复 previousQuestions 中已经出现的题目。
