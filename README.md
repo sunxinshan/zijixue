@@ -64,6 +64,19 @@ continue / finish
 - LocalStorage
 - DeepSeek `deepseek-v4-flash`
 
+
+## Baseline Question Cache
+
+当某个 Knowledge 的 LearningState 为空时，服务器会首次生成并缓存 15 道基线题。后续空状态请求复用该题库，不重复调用模型。
+
+默认存储位置：
+
+```text
+.data/baselines/{knowledgeId}.json
+```
+
+可通过 `BASELINE_STORAGE_DIR` 修改。
+
 ## LLM 配置
 
 默认 `mock`，无需 API Key，适合本地测试。

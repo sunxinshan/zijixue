@@ -15,7 +15,6 @@ import {
   evaluateQuestionAnswer,
   XP_PER_CORRECT,
 } from "@/lib/game";
-import { createInitialLearningState } from "@/lib/mastery";
 import {
   completeSession,
   getLearningState,
@@ -84,9 +83,7 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
     async function initialize() {
       try {
         const storage = loadAgentStorage();
-        const currentLearningState =
-          getLearningState(storage, knowledge.id) ??
-          createInitialLearningState(storage.userId, knowledge.id);
+        const currentLearningState = getLearningState(storage, knowledge.id);
         const response = await startAgentSession({
           userId: storage.userId,
           knowledge,

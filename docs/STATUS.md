@@ -165,6 +165,20 @@ Validator 校验：
 - strategyLevel 3 以上必须提供 explanation 和 examples
 - persistent_failure 必须升级 strategyLevel 并改变教学方式
 
+
+## 8.1 Baseline Question Cache
+
+当 `analyze_learning_state` 的 LearningState 为空时：
+
+- 首次请求由模型生成 15 道基线题。
+- 题目通过 Validator 后保存到服务器端。
+- 后续同 Knowledge 的空状态请求直接复用。
+- 非空状态仍进入 TeachingStrategy 动态出题流程。
+- 默认存储目录：`.data/baselines/{knowledgeId}.json`
+- 可通过 `BASELINE_STORAGE_DIR` 覆盖。
+
+服务器文件只保存 Knowledge 基线题目，不保存用户学习数据。
+
 ## 9. 当前 Storage
 
 LocalStorage 统一 Key：

@@ -120,6 +120,25 @@ interface TeachingStrategy {
 - 不允许越过当前 Level
 - 程序必须校验 Agent 输出
 
+
+## 4.1 Baseline Question Cache
+
+当 `analyze_learning_state` 发现当前 Knowledge 的 LearningState 为空时：
+
+- 不直接依赖每次请求动态生成首批题目。
+- 首次由模型生成一批 15 道基线题。
+- 程序验证后保存到服务器端。
+- 同一 Knowledge 的所有后续空状态请求复用该基线题库。
+- 基线题目不是用户学习数据，不写入 LocalStorage LearningState。
+
+服务器存储通过 Storage Layer 封装，默认目录：
+
+```text
+.data/baselines/{knowledgeId}.json
+```
+
+可通过 `BASELINE_STORAGE_DIR` 覆盖。
+
 ## 5. 教学输出顺序
 
 需要教学干预时：

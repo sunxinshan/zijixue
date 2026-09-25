@@ -1,8 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import type { z } from "zod";
 
 import { comparativeKnowledge } from "@/data/knowledge/comparative";
 import { createBatchPerformance } from "@/lib/agent/analysis";
+import { getOrCreateBaselineBatch } from "@/lib/agent/baseline";
+import { createMemoryBaselineStore } from "@/lib/agent/baseline-store";
+import type { LLMProvider } from "@/lib/agent/llm";
 import {
   runCompleteBatchGraph,
   runStartSessionGraph,
@@ -83,6 +87,7 @@ test("LangGraph 启动流程生成 TeachingStrategy 和 15 道题", async () => 
       userId: "local-user",
       knowledge: comparativeKnowledge,
       learningState,
+      isEmptyState: false,
     },
     provider,
   );
@@ -102,7 +107,7 @@ test("未达标 batch 返回 continue、TeachingStrategy 和下一批题目", as
   const provider = createMockLLMProvider();
   const learningState = createInitialLearningState("local-user", "comparative");
   const started = await runStartSessionGraph(
-    { userId: "local-user", knowledge: comparativeKnowledge, learningState },
+    { userId: "local-user", knowledge: comparativeKnowledge, learningState, isEmptyState: false },
     provider,
   );
   const { result } = await runBatch(provider, {
@@ -131,7 +136,7 @@ test("连续稳定正确后生成 Summary 并更新 LearningState", async () => 
   const provider = createMockLLMProvider();
   const learningState = createInitialLearningState("local-user", "comparative");
   const started = await runStartSessionGraph(
-    { userId: "local-user", knowledge: comparativeKnowledge, learningState },
+    { userId: "local-user", knowledge: comparativeKnowledge, learningState, isEmptyState: false },
     provider,
   );
 
@@ -162,4 +167,73 @@ test("连续稳定正确后生成 Summary 并更新 LearningState", async () => 
   assert.ok(second.result.sessionSummary);
   assert.ok(second.result.learningState.mastery >= 90);
   assert.equal(second.result.learningState.strategyLevel, 5);
+});
+
+test("空 LearningState 首次生成并持久化基线题目，后续请求直接复用", async () => {
+  const provider = createMockLLMProvider();
+  let calls = 0;
+  const countingProvider: LLMProvider = {
+    kind: "counting",
+    async generate<T>(
+      prompt: string,
+      schema: z.ZodType<T>,
+      context?: unknown,
+    ) {
+      calls += 1;
+      return provider.generate(prompt, schema, context);
+    },
+  };
+  const store = createMemoryBaselineStore();
+
+  const first = await getOrCreateBaselineBatch({
+    knowledge: comparativeKnowledge,
+    provider: countingProvider,
+    store,
+  });
+  const second = await getOrCreateBaselineBatch({
+    knowledge: comparativeKnowledge,
+    provider: countingProvider,
+    store,
+  });
+
+  assert.equal(calls, 1);
+  assert.equal(first.questions.length, 15);
+  assert.deepEqual(
+    first.questions.map((question) => question.id),
+    second.questions.map((question) => question.id),
+  );
+  assert.ok(first.questions.every((question) => question.id.startsWith("baseline-")));
+});
+
+test("空 LearningState 启动图使用预生成基线题目", async () => {
+  const provider = createMockLLMProvider();
+  const store = createMemoryBaselineStore();
+  const learningState = createInitialLearningState("local-user", "comparative");
+
+  const first = await runStartSessionGraph(
+    {
+      userId: "local-user",
+      knowledge: comparativeKnowledge,
+      learningState,
+      isEmptyState: true,
+    },
+    provider,
+    store,
+  );
+  const second = await runStartSessionGraph(
+    {
+      userId: "another-user",
+      knowledge: comparativeKnowledge,
+      learningState,
+      isEmptyState: true,
+    },
+    provider,
+    store,
+  );
+
+  assert.deepEqual(
+    first.batch.questions.map((question) => question.id),
+    second.batch.questions.map((question) => question.id),
+  );
+  assert.equal(first.strategy.reason.includes("基线题目"), true);
 });

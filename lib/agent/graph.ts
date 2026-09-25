@@ -1,6 +1,11 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 
 import { analyzeBatch, createInitialObservation } from "@/lib/agent/analysis";
+import {
+  createBaselineStrategy,
+  getOrCreateBaselineBatch,
+} from "@/lib/agent/baseline";
+import type { BaselineQuestionStore } from "@/lib/agent/baseline-store";
 import type { LLMProvider } from "@/lib/agent/llm";
 import { createLLMProvider } from "@/lib/agent/provider";
 import {
@@ -45,6 +50,10 @@ const StartGraphState = Annotation.Root({
   learningState: Annotation<LearningState>(),
   sessionId: Annotation<string>(
     replaceValue<string>(() => createLocalId("session")),
+  ),
+  isEmptyState: Annotation<boolean>(),
+  baselineBatch: Annotation<QuestionBatch | null>(
+    replaceValue<QuestionBatch | null>(() => null),
   ),
   observation: Annotation<BatchObservation | null>(
     replaceValue<BatchObservation | null>(() => null),
@@ -130,7 +139,10 @@ async function generateValidatedBatch(
   );
 }
 
-function createStartGraph(provider: LLMProvider) {
+function createStartGraph(
+  provider: LLMProvider,
+  baselineStore?: BaselineQuestionStore,
+) {
   const loadContext = async (state: typeof StartGraphState.State) => {
     return {
       learningState: {
@@ -141,8 +153,22 @@ function createStartGraph(provider: LLMProvider) {
     };
   };
 
-  const analyzeLearningState = async () => {
+  const analyzeLearningState = async (
+    state: typeof StartGraphState.State,
+  ) => {
+    if (!state.isEmptyState) {
+      return {
+        observation: createInitialObservation(),
+      };
+    }
+
+    const baselineBatch = await getOrCreateBaselineBatch({
+      knowledge: state.knowledge,
+      provider,
+      store: baselineStore,
+    });
     return {
+      baselineBatch,
       observation: createInitialObservation(),
     };
   };
@@ -150,6 +176,12 @@ function createStartGraph(provider: LLMProvider) {
   const generateTeachingStrategy = async (
     state: typeof StartGraphState.State,
   ) => {
+    if (state.baselineBatch) {
+      return {
+        strategy: createBaselineStrategy(state.knowledge, state.baselineBatch),
+      };
+    }
+
     if (!state.observation) {
       throw new AgentValidationError("start graph 缺少 initial observation");
     }
@@ -167,6 +199,12 @@ function createStartGraph(provider: LLMProvider) {
   const generateQuestionBatch = async (
     state: typeof StartGraphState.State,
   ) => {
+    if (state.baselineBatch) {
+      return {
+        currentBatch: state.baselineBatch,
+      };
+    }
+
     if (!state.strategy) {
       throw new AgentValidationError("start graph 缺少 TeachingStrategy");
     }
@@ -355,13 +393,15 @@ export interface StartSessionGraphInput {
   userId: string;
   knowledge: Knowledge;
   learningState: LearningState;
+  isEmptyState: boolean;
 }
 
 export async function runStartSessionGraph(
   input: StartSessionGraphInput,
   provider: LLMProvider = createLLMProvider(),
+  baselineStore?: BaselineQuestionStore,
 ) {
-  const graph = createStartGraph(provider);
+  const graph = createStartGraph(provider, baselineStore);
   const result = await graph.invoke(input);
 
   if (!result.strategy || !result.currentBatch) {

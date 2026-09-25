@@ -30,6 +30,7 @@ export async function POST(request: Request) {
       userId: input.userId,
       knowledge,
       learningState,
+      isEmptyState: !input.learningState,
     });
 
     const session: LearningSession = {
