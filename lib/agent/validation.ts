@@ -348,6 +348,10 @@ export function validateQuestionBatch(
     }
     ids.add(question.id);
 
+    if (!/[\u4e00-\u9fff]/.test(question.question)) {
+      throw new AgentValidationError(`题干必须使用中文说明：${question.question}`);
+    }
+
     const normalizedText = normalizeQuestionText(question.question);
     if (texts.has(normalizedText)) {
       throw new AgentValidationError(`题目明显重复：${question.question}`);

@@ -263,7 +263,7 @@ test("Validator 将模型返回的 coverageItemId=null 规范化为 undefined", 
   const questions = Array.from({ length: 15 }, (_, index) => ({
     id: `null-coverage-${index}`,
     type: "choice" as const,
-    question: `Tom is taller than Ken ${index}`,
+    question: `请选择正确的词：Tom is taller than Ken ${index}`,
     options: ["than", "as", "of"],
     answer: "than",
     explanation: "比较级后用 than。",

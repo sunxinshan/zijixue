@@ -70,7 +70,9 @@ export function buildBatchGenerationPrompt(context: BatchGenerationContext): str
 - difficulty 必须是 1 到 5 的整数。
 - 不要重复 previousQuestions 中已经出现的题目。
 - 正确答案不要总放在第一个位置。
+- question 题干必须使用中文说明；英文只能出现在被引用的句子、空格、或 options 中。
 - 每道题必须包含 id、type、question、options、answer、explanation、knowledgeId、knowledgeSubtopic、patternId、coverageItemId、difficulty。
+- 不要返回全英文题干。
 - 只返回 JSON 对象，并且仅包含 questions 数组。
 
 当前 Knowledge / Subtopic 边界：

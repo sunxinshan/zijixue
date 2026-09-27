@@ -322,49 +322,49 @@ function grammarQuestion(
     { question: string; options: string[]; answer: string; explanation: string }
   > = {
     "comparative-than": {
-      question: "Tom is taller ___ Ken.",
+      question: "选择正确的词：Tom is taller ___ Ken.",
       options: ["than", "as", "of"],
       answer: "than",
       explanation: "比较级后用 than 引出比较对象。",
     },
     "which-comparative": {
-      question: "Which is longer, April ___ May?",
+      question: "选择正确的词：Which is longer, April ___ May?",
       options: ["or", "and", "than"],
       answer: "or",
       explanation: "Which A or B? 表示两个对象中选一个。",
     },
     "superlative-the": {
-      question: "Tom is ___ tallest.",
+      question: "选择正确的词：Tom is ___ tallest.",
       options: ["the", "a", "than"],
       answer: "the",
       explanation: "最高级前通常使用 the。",
     },
     "superlative-of": {
-      question: "Tom is the tallest ___ the three.",
+      question: "选择正确的词：Tom is the tallest ___ the three.",
       options: ["of", "in", "than"],
       answer: "of",
       explanation: "of 表示范围中的人或物。",
     },
     "superlative-in": {
-      question: "I run the fastest ___ my class.",
+      question: "选择正确的词：I run the fastest ___ my class.",
       options: ["in", "of", "than"],
       answer: "in",
       explanation: "in 表示地点或班级范围。",
     },
     "which-superlative": {
-      question: "___ animal is the strongest?",
+      question: "选择正确的词：___ animal is the strongest?",
       options: ["Which", "Who", "What"],
       answer: "Which",
       explanation: "Which + 最高级用于从范围中提问。",
     },
     "as-as": {
-      question: "My dog is ___ big as yours.",
+      question: "选择正确的词：My dog is ___ big as yours.",
       options: ["as", "than", "more"],
       answer: "as",
       explanation: "as + 形容词 + as 表示和……一样。",
     },
     "not-as-as": {
-      question: "I'm ___ as tall as Penny.",
+      question: "选择正确的词：I'm ___ as tall as Penny.",
       options: ["not", "more", "than"],
       answer: "not",
       explanation: "not as...as 表示没有……那么……。",
