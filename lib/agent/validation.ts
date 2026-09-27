@@ -255,6 +255,36 @@ function normalizeStrategyPayload(value: unknown): unknown {
   return normalized;
 }
 
+function normalizeQuestionBatchPayload(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  const source = value as Record<string, unknown>;
+  if (!Array.isArray(source.questions)) return value;
+
+  return {
+    ...source,
+    questions: source.questions.map((item) => {
+      if (!item || typeof item !== "object") return item;
+      const question = { ...(item as Record<string, unknown>) };
+
+      if (Array.isArray(question.options)) {
+        question.options = question.options.map((option) =>
+          typeof option === "string" ? option : String(option),
+        );
+      }
+
+      if (question.type === "true-false") {
+        delete question.options;
+      }
+
+      if (question.coverageItemId === null) {
+        delete question.coverageItemId;
+      }
+
+      return question;
+    }),
+  };
+}
+
 function normalizeQuestionText(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").replace(/[?.!,，。！？]/g, "").trim();
 }
@@ -366,7 +396,9 @@ export function validateQuestionBatch(
   knowledge: Knowledge,
   distribution?: QuestionDistributionItem[],
 ): QuestionBatch {
-  const parsed = questionBatchSchema.safeParse(value);
+  const parsed = questionBatchSchema.safeParse(
+    normalizeQuestionBatchPayload(value),
+  );
   if (!parsed.success) {
     throw new AgentValidationError(`题目结构无效：${parsed.error.message}`);
   }

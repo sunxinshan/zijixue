@@ -474,3 +474,30 @@ test("questionDistribution 对象格式会规范化为数组", () => {
     6,
   );
 });
+
+test("判断题带布尔 options 时会自动移除 options", () => {
+  const knowledge = scopedKnowledge("as-as");
+  const validated = validateQuestionBatch(
+    {
+      questions: [
+        {
+          id: "tf-as-as",
+          type: "true-false",
+          question: "“as big as”表示同级比较。",
+          options: [true, false],
+          answer: true,
+          explanation: "as...as 表示同级比较。",
+          knowledgeId: "comparative",
+          knowledgeSubtopic: "as-as",
+          patternId: "as-as",
+          coverageItemId: "big",
+          difficulty: 1,
+        },
+      ],
+    },
+    knowledge,
+  );
+
+  assert.equal(validated.questions[0].options, undefined);
+  assert.equal(validated.questions[0].answer, true);
+});
