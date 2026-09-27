@@ -8,7 +8,11 @@ import { AnswerButton } from "@/components/game/AnswerButton";
 import { ForestBackdrop } from "@/components/shared/ForestBackdrop";
 import { ProgressBar } from "@/components/shared/ProgressBar";
 import { createBatchPerformance } from "@/lib/agent/analysis";
-import { completeAgentBatch, startAgentSession } from "@/lib/agent/client";
+import {
+  AgentRequestError,
+  completeAgentBatch,
+  startAgentSession,
+} from "@/lib/agent/client";
 import {
   createLocalId,
   createTimestamp,
@@ -24,6 +28,7 @@ import {
   saveQuestions,
   upsertSession,
 } from "@/lib/storage";
+import { useAppStorage } from "@/lib/use-app-storage";
 import type {
   Attempt,
   BatchPerformance,
@@ -71,9 +76,11 @@ export function GameView({
   subtopic?: Subtopic;
 }) {
   const router = useRouter();
+  const storageState = useAppStorage();
   const initialized = useRef(false);
   const [status, setStatus] = useState<GameStatus>("loading");
   const [errorMessage, setErrorMessage] = useState("");
+  const [errorStatus, setErrorStatus] = useState<number | null>(null);
   const [provider, setProvider] = useState("");
   const [session, setSession] = useState<LearningSession | null>(null);
   const [learningState, setLearningState] = useState<LearningState | null>(null);
@@ -122,6 +129,7 @@ export function GameView({
         setErrorMessage(
           error instanceof Error ? error.message : "Agent 初始化失败",
         );
+        setErrorStatus(error instanceof AgentRequestError ? error.status : null);
         setStatus("error");
       }
     }
@@ -269,6 +277,65 @@ export function GameView({
           <p className="mt-3 font-black text-[#315341]">
             Agent 正在准备本批题目…
           </p>
+        </div>
+      </ForestBackdrop>
+    );
+  }
+
+  if (status === "error" && mode === "challenge" && errorStatus === 403) {
+    const subtopicStates = getSubtopicLearningStates(storageState, knowledge.id);
+    return (
+      <ForestBackdrop compact>
+        <div className="mx-auto max-w-2xl rounded-[2rem] bg-white/92 p-6 shadow-sm sm:p-8">
+          <div className="text-center">
+            <span className="text-5xl">🔒</span>
+            <h1 className="mt-4 text-2xl font-black text-[#173f2a]">
+              Challenge 尚未解锁
+            </h1>
+            <p className="mt-2 text-sm font-semibold leading-6 text-[#74887b]">
+              完成全部 Subtopic，并完成 required Pattern Coverage 后即可挑战。
+            </p>
+          </div>
+          <div className="mt-6 space-y-3">
+            {knowledge.subtopics.map((subtopic) => {
+              const state = subtopicStates.find(
+                (item) => item.subtopicId === subtopic.id,
+              );
+              const covered = subtopic.patterns.filter(
+                (pattern) =>
+                  !pattern.required ||
+                  state?.patternProgress[pattern.id]?.coverageComplete,
+              ).length;
+              return (
+                <div
+                  key={subtopic.id}
+                  className="flex items-center justify-between gap-4 rounded-2xl bg-[#f8fbf5] p-4"
+                >
+                  <div>
+                    <p className="font-black text-[#315341]">{subtopic.name}</p>
+                    <p className="mt-1 text-xs font-semibold text-[#74887b]">
+                      Coverage {covered}/{subtopic.patterns.length}
+                    </p>
+                  </div>
+                  <span
+                    className={`rounded-full px-3 py-1 text-xs font-black ${
+                      state?.completed
+                        ? "bg-[#e6f7e9] text-[#17693c]"
+                        : "bg-[#fff3c9] text-[#8a5a00]"
+                    }`}
+                  >
+                    {state?.completed ? "已完成" : "未完成"}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <Link
+            href={`/knowledge/${knowledge.id}`}
+            className="mt-6 flex min-h-14 items-center justify-center rounded-2xl bg-[#2d995b] px-6 font-black text-white"
+          >
+            返回 Subtopic 列表
+          </Link>
         </div>
       </ForestBackdrop>
     );

@@ -26,6 +26,16 @@ interface CompleteBatchResponse {
   learningState: LearningState;
 }
 
+export class AgentRequestError extends Error {
+  readonly status: number;
+
+  constructor(message: string, status: number) {
+    super(message);
+    this.name = "AgentRequestError";
+    this.status = status;
+  }
+}
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
@@ -34,7 +44,10 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   });
   const data = (await response.json()) as T & { error?: string };
   if (!response.ok) {
-    throw new Error(data.error ?? "Agent 服务暂时不可用");
+    throw new AgentRequestError(
+      data.error ?? "Agent 服务暂时不可用",
+      response.status,
+    );
   }
   return data;
 }
