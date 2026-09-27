@@ -110,3 +110,52 @@ export function getSubtopicPatterns(
 ): Pattern[] {
   return knowledge.subtopics.find((subtopic) => subtopic.id === subtopicId)?.patterns ?? [];
 }
+
+import {
+  MAX_QUESTIONS_PER_BATCH,
+} from "@/lib/game";
+import type { TeachingStrategy } from "@/types/agent";
+
+export function enforceRequiredPatternCoverage(
+  strategy: TeachingStrategy,
+  knowledge: Knowledge,
+  progress: Record<string, PatternProgress>,
+): TeachingStrategy {
+  if (strategy.action === "finish") return strategy;
+
+  const patterns = knowledge.subtopics.flatMap((subtopic) => subtopic.patterns);
+  const counts = new Map(
+    strategy.questionDistribution.map((item) => [item.patternId, item.count]),
+  );
+
+  for (const pattern of patterns) {
+    if (!pattern.required || progress[pattern.id]?.coverageComplete) continue;
+    if ((counts.get(pattern.id) ?? 0) === 0) counts.set(pattern.id, 1);
+  }
+
+  let total = Array.from(counts.values()).reduce((sum, value) => sum + value, 0);
+  const focus = new Set(strategy.focus);
+  while (total > MAX_QUESTIONS_PER_BATCH) {
+    const candidate = patterns
+      .filter((pattern) => (counts.get(pattern.id) ?? 0) > 1)
+      .sort((left, right) => {
+        const leftCovered = progress[left.id]?.coverageComplete ? 0 : 1;
+        const rightCovered = progress[right.id]?.coverageComplete ? 0 : 1;
+        if (leftCovered !== rightCovered) return leftCovered - rightCovered;
+        const leftFocus = focus.has(left.id) ? 1 : 0;
+        const rightFocus = focus.has(right.id) ? 1 : 0;
+        return leftFocus - rightFocus;
+      })[0];
+
+    if (!candidate) break;
+    counts.set(candidate.id, (counts.get(candidate.id) ?? 1) - 1);
+    total -= 1;
+  }
+
+  return {
+    ...strategy,
+    questionDistribution: Array.from(counts.entries())
+      .filter(([, count]) => count > 0)
+      .map(([patternId, count]) => ({ patternId, count })),
+  };
+}

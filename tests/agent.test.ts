@@ -72,7 +72,7 @@ async function strategyFor(
   return provider.generate("mock", teachingStrategyPublicSchema, context);
 }
 
-test("Mock Provider 按 questionDistribution 生成 15 道 Pattern 题", async () => {
+test("Mock Provider 严格按 questionDistribution 生成 Pattern 题", async () => {
   const provider = createMockLLMProvider();
   const knowledge = scopedKnowledge("form-change");
   const strategy: TeachingStrategy = {
@@ -133,7 +133,7 @@ test("B：y-ending 薄弱时下一批增加 y-ending 占比", async () => {
   const regularCount =
     strategy.questionDistribution.find((item) => item.patternId === "regular")?.count ?? 0;
   assert.ok(yCount > regularCount);
-  assert.ok(yCount >= 4);
+  assert.ok(yCount >= 3);
 });
 
 test("C：irregular 只覆盖 good 不能视为 Coverage 完成", async () => {
@@ -187,7 +187,7 @@ test("E：9/15 → 12/15 → 14/15 识别 improving", async () => {
   assert.equal(strategy.action, "increase_difficulty");
 });
 
-test("Validator 拒绝 Pattern distribution 总数不是 15", () => {
+test("Validator 拒绝 Pattern distribution 超出动态范围", () => {
   assert.throws(
     () =>
       validateTeachingStrategy(
@@ -197,12 +197,12 @@ test("Validator 拒绝 Pattern distribution 总数不是 15", () => {
           action: "targeted_practice",
           focus: ["y-ending"],
           difficulty: 2,
-          questionDistribution: [{ patternId: "y-ending", count: 14 }],
+          questionDistribution: [{ patternId: "y-ending", count: 21 }],
           reason: "测试",
         },
         scopedKnowledge("form-change"),
       ),
-    /总数必须为 15/,
+    /总数必须在 3-20 之间/,
   );
 });
 

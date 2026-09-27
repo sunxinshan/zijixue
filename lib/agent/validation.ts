@@ -1,6 +1,10 @@
 import { z } from "zod";
 
-import { QUESTIONS_PER_BATCH } from "@/lib/game";
+import {
+  MAX_QUESTIONS_PER_BATCH,
+  MAX_QUESTIONS_PER_POOL_PATTERN,
+  MIN_QUESTIONS_PER_BATCH,
+} from "@/lib/game";
 import type {
   Attempt,
   BatchObservation,
@@ -37,7 +41,7 @@ export const patternProgressSchema: z.ZodType<PatternProgress> = z.object({
 export const questionDistributionItemSchema: z.ZodType<QuestionDistributionItem> =
   z.object({
     patternId: z.string().min(1),
-    count: z.number().int().min(0).max(QUESTIONS_PER_BATCH),
+    count: z.number().int().min(0).max(MAX_QUESTIONS_PER_POOL_PATTERN),
   });
 
 export const teachingStrategySchema = z.object({
@@ -269,9 +273,12 @@ export function validateTeachingStrategy(
   }
 
   const total = distribution.reduce((sum, item) => sum + item.count, 0);
-  if (parsed.data.action !== "finish" && total !== QUESTIONS_PER_BATCH) {
+  if (
+    parsed.data.action !== "finish" &&
+    (total < MIN_QUESTIONS_PER_BATCH || total > MAX_QUESTIONS_PER_BATCH)
+  ) {
     throw new AgentValidationError(
-      `questionDistribution 总数必须为 ${QUESTIONS_PER_BATCH}，实际为 ${total}`,
+      `questionDistribution 总数必须在 ${MIN_QUESTIONS_PER_BATCH}-${MAX_QUESTIONS_PER_BATCH} 之间，实际为 ${total}`,
     );
   }
   if (parsed.data.action === "finish" && total !== 0) {
@@ -330,9 +337,9 @@ export function validateQuestionBatch(
     coverageItemId: question.coverageItemId ?? undefined,
     difficulty: question.difficulty as Difficulty,
   }));
-  if (questions.length !== QUESTIONS_PER_BATCH) {
+  if (questions.length === 0 || questions.length > MAX_QUESTIONS_PER_POOL_PATTERN) {
     throw new AgentValidationError(
-      `题目数量必须为 ${QUESTIONS_PER_BATCH}，实际为 ${questions.length}`,
+      `题目数量必须在 1-${MAX_QUESTIONS_PER_POOL_PATTERN} 之间，实际为 ${questions.length}`,
     );
   }
 

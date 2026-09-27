@@ -1,6 +1,9 @@
 import { z } from "zod";
 
-import { QUESTIONS_PER_BATCH } from "@/lib/game";
+import {
+  MAX_QUESTIONS_PER_BATCH,
+  MIN_QUESTIONS_PER_BATCH,
+} from "@/lib/game";
 import {
   attemptSchema,
   batchPerformanceSchema,
@@ -25,7 +28,10 @@ export const completeBatchRequestSchema = z.object({
   subtopicId: z.string().optional(),
   learningState: learningStateSchema,
   sessionId: z.string().min(1),
-  attempts: z.array(attemptSchema).length(QUESTIONS_PER_BATCH),
+  attempts: z
+    .array(attemptSchema)
+    .min(MIN_QUESTIONS_PER_BATCH)
+    .max(MAX_QUESTIONS_PER_BATCH),
   currentBatch: questionBatchPublicSchema,
   batchNumber: z.number().int().min(1),
   pastBatches: z.array(batchPerformanceSchema).default([]),

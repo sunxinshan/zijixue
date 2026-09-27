@@ -3,8 +3,11 @@ import test from "node:test";
 import type { z } from "zod";
 
 import { comparativeKnowledge, getSubtopic } from "@/data/knowledge/comparative";
-import { getOrCreateBaselineBatch } from "@/lib/agent/baseline";
-import { createMemoryBaselineStore } from "@/lib/agent/baseline-store";
+import {
+  ensureQuestionPools,
+  getOrCreateQuestionPoolBatch,
+} from "@/lib/agent/question-pool";
+import { createMemoryQuestionPoolRepository } from "@/lib/agent/question-pool-store";
 import { runStartSessionGraph } from "@/lib/agent/graph";
 import type { LLMProvider } from "@/lib/agent/llm";
 import { createMockLLMProvider } from "@/lib/agent/providers/mock";
@@ -49,7 +52,7 @@ function completedSubtopicState(subtopicId: string): LearningState {
   };
 }
 
-test("空 LearningState 生成并复用 Subtopic 基线题库", async () => {
+test("首个用户生成 QuestionPool，第二个用户直接复用", async () => {
   const provider = createMockLLMProvider();
   let calls = 0;
   const countingProvider: LLMProvider = {
@@ -59,8 +62,9 @@ test("空 LearningState 生成并复用 Subtopic 基线题库", async () => {
       return provider.generate(prompt, schema, context);
     },
   };
-  const store = createMemoryBaselineStore();
+  const repository = createMemoryQuestionPoolRepository();
   const knowledge = scopedKnowledge("form-change");
+  const subtopic = knowledge.subtopics[0];
   const learningState = createInitialLearningState(
     "local-user",
     "comparative",
@@ -69,27 +73,31 @@ test("空 LearningState 生成并复用 Subtopic 基线题库", async () => {
     "form-change",
   );
 
-  const first = await getOrCreateBaselineBatch({
+  const firstPools = await ensureQuestionPools({
     knowledge,
-    learningState,
-    scopeKey: "comparative:subtopic:form-change",
+    subtopic,
     provider: countingProvider,
-    store,
+    repository,
   });
-  const second = await getOrCreateBaselineBatch({
+  const secondPools = await ensureQuestionPools({
     knowledge,
-    learningState,
-    scopeKey: "comparative:subtopic:form-change",
+    subtopic,
     provider: countingProvider,
-    store,
+    repository,
+  });
+  const firstBatch = await getOrCreateQuestionPoolBatch({
+    knowledge,
+    subtopic,
+    learningState,
+    provider: countingProvider,
+    repository,
   });
 
   assert.equal(calls, 1);
-  assert.equal(first.questions.length, 15);
-  assert.deepEqual(
-    first.questions.map((question) => question.id),
-    second.questions.map((question) => question.id),
-  );
+  assert.equal(firstPools.length, subtopic.patterns.length);
+  assert.equal(secondPools.length, subtopic.patterns.length);
+  assert.ok(firstBatch.questions.length >= 3);
+  assert.ok(firstBatch.questions.length <= 20);
 });
 
 test("Subtopic 启动图只看到当前 Subtopic 的 Patterns", async () => {
@@ -110,10 +118,11 @@ test("Subtopic 启动图只看到当前 Subtopic 的 Patterns", async () => {
       isEmptyState: true,
     },
     provider,
-    createMemoryBaselineStore(),
+    createMemoryQuestionPoolRepository(),
   );
 
-  assert.equal(started.batch.questions.length, 15);
+  assert.ok(started.batch.questions.length >= 3);
+  assert.ok(started.batch.questions.length <= 20);
   assert.ok(
     started.batch.questions.every(
       (question) => question.knowledgeSubtopic === "form-change",
@@ -121,7 +130,7 @@ test("Subtopic 启动图只看到当前 Subtopic 的 Patterns", async () => {
   );
   assert.equal(
     new Set(started.batch.questions.map((question) => question.patternId)).size,
-    6,
+    getSubtopic(comparativeKnowledge, "form-change")?.patterns.length,
   );
 });
 
@@ -155,7 +164,8 @@ test("Challenge 模式可以混合所有 Subtopic 和 Pattern", async () => {
     provider,
   );
 
-  assert.equal(started.batch.questions.length, 15);
+  assert.ok(started.batch.questions.length >= 3);
+  assert.ok(started.batch.questions.length <= 20);
   assert.ok(
     new Set(
       started.batch.questions.map((question) => question.knowledgeSubtopic),

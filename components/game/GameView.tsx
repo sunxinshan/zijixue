@@ -267,7 +267,7 @@ export function GameView({
         <div className="flex min-h-[70vh] flex-col items-center justify-center rounded-[2rem] bg-white/85 p-8 text-center shadow-sm">
           <span className="animate-bounce text-4xl">🤖</span>
           <p className="mt-3 font-black text-[#315341]">
-            Agent 正在准备本批 15 道题…
+            Agent 正在准备本批题目…
           </p>
         </div>
       </ForestBackdrop>
@@ -303,7 +303,7 @@ export function GameView({
         <div className="flex min-h-[70vh] flex-col items-center justify-center rounded-[2rem] bg-white/85 p-8 text-center shadow-sm">
           <span className="animate-bounce text-4xl">🌿</span>
           <p className="mt-3 font-black text-[#315341]">
-            Agent 正在分析这 15 道题…
+            Agent 正在分析当前批次…
           </p>
           <p className="mt-2 text-sm font-semibold text-[#74887b]">
             程序已经完成本地判分，正在生成下一步教学建议。
@@ -363,7 +363,7 @@ export function GameView({
             onClick={startNextBatch}
             className="mt-6 min-h-14 w-full rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-6 font-black text-white shadow-lg"
           >
-            开始下一批 15 题
+            开始下一批题目
           </button>
         </div>
       </ForestBackdrop>
@@ -387,7 +387,7 @@ export function GameView({
         </Link>
         <div className="flex items-center gap-2 rounded-2xl bg-white/85 px-4 py-2 shadow-sm">
           <span className="font-black text-[#315341]">
-            第 {batchNumber} 批 · {currentIndex + 1}/15
+            第 {batchNumber} 批 · {currentIndex + 1}/{currentBatch.questions.length}
           </span>
           <span className="text-[#d9a417]">⭐</span>
           <span className="font-black text-[#b27b00]">

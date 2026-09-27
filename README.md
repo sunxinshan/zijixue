@@ -32,7 +32,7 @@ comparative
 - 程序负责 Knowledge、Subtopic、Pattern 边界。
 - 程序记录 Attempts 和 Pattern Coverage。
 - Agent 负责诊断、Pattern 选择、题量分配、解释和难度调整。
-- 每批 15 道题。
+- 每批题数由 Pattern Coverage、表现和 TeachingStrategy 动态决定，通常为 3～20 题。
 - Coverage 与 Mastery 分离。
 - required Pattern 未完成 Coverage 时优先训练。
 - Challenge 阶段混合所有 Subtopic 和 Pattern。

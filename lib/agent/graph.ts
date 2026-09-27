@@ -1,12 +1,15 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 
 import { analyzeBatch, createInitialObservation } from "@/lib/agent/analysis";
-import { applyBatchToPatternProgress } from "@/lib/agent/coverage";
 import {
-  createBaselineStrategy,
-  getOrCreateBaselineBatch,
-} from "@/lib/agent/baseline";
-import type { BaselineQuestionStore } from "@/lib/agent/baseline-store";
+  applyBatchToPatternProgress,
+  enforceRequiredPatternCoverage,
+} from "@/lib/agent/coverage";
+import {
+  createQuestionPoolStrategy,
+  getOrCreateQuestionPoolBatch,
+} from "@/lib/agent/question-pool";
+import type { QuestionPoolRepository } from "@/lib/agent/question-pool-store";
 import type { LLMProvider } from "@/lib/agent/llm";
 import { createLLMProvider } from "@/lib/agent/provider";
 import {
@@ -23,7 +26,7 @@ import {
   validateSessionSummary,
   validateTeachingStrategy,
 } from "@/lib/agent/validation";
-import { createLocalId, QUESTIONS_PER_BATCH } from "@/lib/game";
+import { createLocalId } from "@/lib/game";
 import { randomizeChoiceOptionPositions } from "@/lib/agent/question-options";
 import { buildLearningStateFromSummary } from "@/lib/mastery";
 import type {
@@ -58,7 +61,7 @@ const StartGraphState = Annotation.Root({
     replaceValue<string>(() => createLocalId("session")),
   ),
   isEmptyState: Annotation<boolean>(),
-  baselineBatch: Annotation<QuestionBatch | null>(
+  sharedPoolBatch: Annotation<QuestionBatch | null>(
     replaceValue<QuestionBatch | null>(() => null),
   ),
   observation: Annotation<BatchObservation | null>(
@@ -148,7 +151,14 @@ async function generateValidatedStrategy(
     teachingStrategyPublicSchema,
     context,
   );
-  return validateTeachingStrategy(generated, context.knowledge);
+  return validateTeachingStrategy(
+    enforceRequiredPatternCoverage(
+      generated as TeachingStrategy,
+      context.knowledge,
+      context.observation.patternProgress,
+    ),
+    context.knowledge,
+  );
 }
 
 async function generateValidatedBatch(
@@ -170,7 +180,7 @@ async function generateValidatedBatch(
 
 function createStartGraph(
   provider: LLMProvider,
-  baselineStore?: BaselineQuestionStore,
+  questionPoolRepository?: QuestionPoolRepository,
 ) {
   const loadContext = async (state: typeof StartGraphState.State) => {
     return {
@@ -196,19 +206,19 @@ function createStartGraph(
       };
     }
 
-    const scopeKey =
-      state.mode === "challenge"
-        ? `${state.knowledge.id}:challenge`
-        : `${state.knowledge.id}:subtopic:${state.subtopicId}`;
-    const baselineBatch = await getOrCreateBaselineBatch({
+    const subtopic = getSubtopic(state.knowledge, state.subtopicId);
+    if (!subtopic) {
+      throw new AgentValidationError("Subtopic 模式缺少有效 subtopicId");
+    }
+    const sharedPoolBatch = await getOrCreateQuestionPoolBatch({
       knowledge: scopedKnowledge,
+      subtopic,
       learningState: state.learningState,
-      scopeKey,
       provider,
-      store: baselineStore,
+      repository: questionPoolRepository,
     });
     return {
-      baselineBatch,
+      sharedPoolBatch,
       observation: createInitialObservation(state.learningState.patternProgress),
     };
   };
@@ -216,9 +226,9 @@ function createStartGraph(
   const generateTeachingStrategy = async (
     state: typeof StartGraphState.State,
   ) => {
-    if (state.baselineBatch) {
+    if (state.sharedPoolBatch) {
       return {
-        strategy: createBaselineStrategy(state.baselineBatch),
+        strategy: createQuestionPoolStrategy(state.sharedPoolBatch),
       };
     }
 
@@ -239,9 +249,9 @@ function createStartGraph(
   const generateQuestionBatch = async (
     state: typeof StartGraphState.State,
   ) => {
-    if (state.baselineBatch) {
+    if (state.sharedPoolBatch) {
       return {
-        currentBatch: state.baselineBatch,
+        currentBatch: state.sharedPoolBatch,
       };
     }
 
@@ -287,11 +297,11 @@ function createCompletionGraph(provider: LLMProvider) {
     const actualIds = new Set(state.attempts.map((attempt) => attempt.id));
 
     if (
-      state.attempts.length !== QUESTIONS_PER_BATCH ||
-      actualIds.size !== QUESTIONS_PER_BATCH
+      state.attempts.length !== state.currentBatch.questions.length ||
+      actualIds.size !== state.currentBatch.questions.length
     ) {
       throw new AgentValidationError(
-        `record_attempt 必须收到 ${QUESTIONS_PER_BATCH} 条唯一 Attempt`,
+        `record_attempt 必须与当前批次题目数量一致：期望 ${state.currentBatch.questions.length}，实际 ${state.attempts.length}`,
       );
     }
 
@@ -462,9 +472,9 @@ export interface StartSessionGraphInput {
 export async function runStartSessionGraph(
   input: StartSessionGraphInput,
   provider: LLMProvider = createLLMProvider(),
-  baselineStore?: BaselineQuestionStore,
+  questionPoolRepository?: QuestionPoolRepository,
 ) {
-  const graph = createStartGraph(provider, baselineStore);
+  const graph = createStartGraph(provider, questionPoolRepository);
   const result = await graph.invoke(input);
 
   if (!result.strategy || !result.currentBatch) {

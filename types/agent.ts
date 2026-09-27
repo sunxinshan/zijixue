@@ -42,6 +42,8 @@ export interface Pattern {
   required: boolean;
   minimumQuestions: number;
   coverageItems?: string[];
+  explanations: string[];
+  notes?: string[];
   examples: PatternExample[];
 }
 
@@ -49,6 +51,7 @@ export interface Subtopic {
   id: string;
   knowledgeId: string;
   name: string;
+  learningGoal: string;
   description: string;
   minimumQuestions: number;
   targetAccuracy: number;
@@ -74,6 +77,19 @@ export interface Question {
   patternId: string;
   coverageItemId?: string;
   difficulty: Difficulty;
+}
+
+
+export interface QuestionPool {
+  id: string;
+  knowledgeId: string;
+  subtopicId: string;
+  patternId: string;
+  questions: Question[];
+  version: number;
+  status: "active" | "invalid";
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface QuestionBatch {

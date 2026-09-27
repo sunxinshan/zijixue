@@ -201,7 +201,7 @@ mastery = 0
 
 ## 8. 题目抽取
 
-一轮默认 15 道题。
+一轮题量由 Pattern Coverage、LearningState 和 TeachingStrategy 动态决定。
 
 第一版先采用：
 

@@ -7,7 +7,7 @@ import {
   validateSessionSummary,
   validateTeachingStrategy,
 } from "@/lib/agent/validation";
-import { QUESTIONS_PER_BATCH } from "@/lib/game";
+import { MAX_QUESTIONS_PER_BATCH, MIN_QUESTIONS_PER_BATCH } from "@/lib/game";
 import type {
   BatchGenerationContext,
   BatchPerformance,
@@ -39,28 +39,47 @@ function unique<T>(values: T[]): T[] {
 function buildDistribution(
   patterns: Pattern[],
   priorityPatternIds: string[],
+  requestedTotal = Math.min(12, patterns.length + 4),
 ): QuestionDistributionItem[] {
+  const targetTotal = Math.max(
+    MIN_QUESTIONS_PER_BATCH,
+    Math.min(MAX_QUESTIONS_PER_BATCH, requestedTotal),
+  );
   const counts = new Map(patterns.map((pattern) => [pattern.id, 0]));
   const priority = unique(priorityPatternIds).filter((id) => counts.has(id));
   const required = patterns.filter((pattern) => pattern.required).map((pattern) => pattern.id);
   const order = unique([...priority, ...required, ...patterns.map((pattern) => pattern.id)]);
   let assigned = 0;
 
-  for (const patternId of order) {
-    if (assigned >= QUESTIONS_PER_BATCH) break;
-    counts.set(patternId, 1);
-    assigned += 1;
-  }
-
-  for (const patternId of priority) {
-    while (assigned < QUESTIONS_PER_BATCH && (counts.get(patternId) ?? 0) < 6) {
-      counts.set(patternId, (counts.get(patternId) ?? 0) + 1);
+  if (targetTotal <= patterns.length) {
+    for (const patternId of priority) {
+      if (assigned + 3 > targetTotal) break;
+      counts.set(patternId, 3);
+      assigned += 3;
+    }
+    for (const patternId of order) {
+      if (assigned >= targetTotal) break;
+      if ((counts.get(patternId) ?? 0) > 0) continue;
+      counts.set(patternId, 1);
       assigned += 1;
+    }
+  } else {
+    for (const patternId of order) {
+      if (assigned >= targetTotal) break;
+      counts.set(patternId, 1);
+      assigned += 1;
+    }
+
+    for (const patternId of priority) {
+      while (assigned < targetTotal && (counts.get(patternId) ?? 0) < 6) {
+        counts.set(patternId, (counts.get(patternId) ?? 0) + 1);
+        assigned += 1;
+      }
     }
   }
 
   let index = 0;
-  while (assigned < QUESTIONS_PER_BATCH && order.length > 0) {
+  while (assigned < targetTotal && order.length > 0) {
     const patternId = order[index % order.length];
     counts.set(patternId, (counts.get(patternId) ?? 0) + 1);
     assigned += 1;
@@ -149,7 +168,7 @@ function diagnoseMockStrategy(
         action: "change_strategy",
         focus,
         difficulty: clampDifficulty(currentDifficulty - 1),
-        questionDistribution: buildDistribution(patterns, focus),
+        questionDistribution: buildDistribution(patterns, focus, 5),
         explanation: `${pattern?.name ?? persistent.patternId} 连续多个 batch 不稳定，改用更简单、更少干扰项和正反例。`,
         examples: pattern ? exampleStrings(pattern) : [],
         reason: "同一 Pattern 连续多个 batch 低于目标正确率，需要改变教学方式。",
@@ -169,7 +188,7 @@ function diagnoseMockStrategy(
         action: "explain",
         focus,
         difficulty: clampDifficulty(currentDifficulty - 1),
-        questionDistribution: buildDistribution(patterns, focus),
+        questionDistribution: buildDistribution(patterns, focus, 5),
         explanation: `${pattern?.name ?? focus[0]} 出现连续错误，先重新解释规则，再用简单练习确认。`,
         examples: pattern ? exampleStrings(pattern) : [],
         reason: "同一 Pattern 连续出错，判断为规则理解问题。",
@@ -197,7 +216,7 @@ function diagnoseMockStrategy(
       action: "increase_difficulty",
       focus,
       difficulty: clampDifficulty(currentDifficulty + 1),
-      questionDistribution: buildDistribution(patterns, focus),
+      questionDistribution: buildDistribution(patterns, focus, 10),
       explanation: "表现正在连续提高，下一批增加混合和难度。",
       examples: pattern ? exampleStrings(pattern) : [],
       reason: "连续多个 batch 准确率提升。",
@@ -228,7 +247,7 @@ function diagnoseMockStrategy(
       action: "targeted_practice",
       focus,
       difficulty: currentDifficulty,
-      questionDistribution: buildDistribution(patterns, focus),
+      questionDistribution: buildDistribution(patterns, focus, Math.max(8, focus.length * 3)),
       reason: "仍有 required Pattern 未完成 Coverage，优先补齐覆盖。",
     });
   }
@@ -241,7 +260,7 @@ function diagnoseMockStrategy(
       action: "targeted_practice",
       focus,
       difficulty: currentDifficulty,
-      questionDistribution: buildDistribution(patterns, focus),
+      questionDistribution: buildDistribution(patterns, focus, 8),
       reason: "多个 Pattern 同时薄弱，优先训练两个最低分项。",
     });
   }
@@ -254,7 +273,7 @@ function diagnoseMockStrategy(
       action: "targeted_practice",
       focus,
       difficulty: currentDifficulty,
-      questionDistribution: buildDistribution(patterns, focus),
+      questionDistribution: buildDistribution(patterns, focus, 6),
       reason: "错误集中在单一 Pattern。",
     });
   }
@@ -321,6 +340,18 @@ function grammarQuestion(
     string,
     { question: string; options: string[]; answer: string; explanation: string }
   > = {
+    "comparative-be": {
+      question: "选择正确的词：Tom ___ taller than Ken.",
+      options: ["is", "are", "has"],
+      answer: "is",
+      explanation: "A + be + 比较级 + than + B。",
+    },
+    "comparative-action": {
+      question: "选择正确的词：I run ___ than Misa.",
+      options: ["faster", "more fast", "fastest"],
+      answer: "faster",
+      explanation: "行为动词句使用比较级 faster than。",
+    },
     "comparative-than": {
       question: "选择正确的词：Tom is taller ___ Ken.",
       options: ["than", "as", "of"],
@@ -423,7 +454,7 @@ function generateMockQuestions(context: BatchGenerationContext): QuestionBatch {
   const seenQuestions = new Set(context.previousQuestions);
   const questions: Question[] = [];
 
-  for (let index = 0; index < plan.length && questions.length < QUESTIONS_PER_BATCH; index += 1) {
+  for (let index = 0; index < plan.length && questions.length < plan.length; index += 1) {
     const pattern = plan[index];
     const isFormPattern =
       Boolean(pattern.examples[0]?.comparative) &&

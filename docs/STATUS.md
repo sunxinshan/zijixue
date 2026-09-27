@@ -129,7 +129,7 @@ START
 
 ## 7. Question Batch
 
-- 每批 15 道题。
+- 每批题量由 Pattern Coverage、弱项和 TeachingStrategy 动态决定。
 - 只支持 choice / true-false。
 - Batch 不等于 Subtopic。
 - Agent 根据 Pattern Coverage 和历史表现决定 Pattern 分布。
@@ -141,12 +141,12 @@ START
 
 当 Subtopic LearningState 为空时：
 
-- 首次由模型生成 15 道基线题。
+- 首次由模型生成基础 Pattern 题池。
 - 程序验证后保存到服务器端。
 - 后续同 Subtopic 请求复用。
 - 非空状态进入 Pattern 动态教学。
-- 默认目录：`.data/baselines/{scopeKey}.json`
-- 可通过 `BASELINE_STORAGE_DIR` 覆盖。
+- 默认目录：`.data/question-pools/{knowledgeId}__{subtopicId}.json`
+- 可通过 `QUESTION_POOL_DIR` 覆盖。
 
 ## 9. Challenge
 

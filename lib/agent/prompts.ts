@@ -30,7 +30,7 @@ export function buildTeachingStrategyPrompt(
 - strategyLevel 只能是 1 到 5。
 - action 只能是 continue、targeted_practice、explain、simplify、change_strategy、increase_difficulty、mixed_review、finish。
 - focus 必须是 patternId 字符串数组。
-- questionDistribution 必须使用 patternId，除 finish 外 count 总和必须正好为 ${15}。
+- questionDistribution 必须使用 patternId，除 finish 外 count 总和必须在 3-20 之间，由 Coverage、错误率和历史表现决定。
 - 未完成 Coverage 的 required Pattern 必须优先安排。
 - 弱 Pattern 增加题量，已掌握 Pattern 减少题量。
 - strategyLevel 3 以上必须提供 explanation 和 examples。
@@ -57,12 +57,12 @@ export function buildBatchGenerationPrompt(context: BatchGenerationContext): str
   return `你是“英语森林”的题目生成 Agent。程序已经决定 Pattern 教学策略和题目分布，你只能严格按照边界生成题目。
 
 任务边界：
-- 必须生成正好 15 道题。
+- 必须生成题目数量等于 questionDistribution 的 count 总和。
 - 只允许 choice 和 true-false。
 - 每道题必须属于 knowledgeId="${context.knowledge.id}"。
 - 每道题必须同时填写 knowledgeSubtopic 和 patternId。
 - patternId 必须来自当前允许的 Patterns。
-- 必须严格符合 questionDistribution 中每个 Pattern 的 count。
+- 必须严格符合 questionDistribution 中每个 Pattern 的 count，不要额外增加或减少题目。
 - 如果 Pattern 定义了 coverageItems，必须使用 coverageItemId 标记覆盖项。
 - 同一 Pattern 的核心 coverageItems 应尽量全部覆盖。
 - choice 的 answer 必须是 options 中的字符串。

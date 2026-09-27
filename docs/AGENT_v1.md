@@ -98,7 +98,7 @@ interface TeachingStrategy {
 
 ## 4. Question Distribution
 
-下一批仍然生成 15 道题。
+下一批题量由 Pattern Coverage、LearningState 和 TeachingStrategy 动态决定。
 
 例如：
 
@@ -125,12 +125,12 @@ interface TeachingStrategy {
 - 随机化只改变选项顺序，不改变正确答案、题型或 subtopic。
 
 
-## 4.1 Baseline Question Cache
+## 4.1 Shared QuestionPool
 
 当 `analyze_learning_state` 发现当前 Knowledge 的 LearningState 为空时：
 
 - 不直接依赖每次请求动态生成首批题目。
-- 首次由模型生成一批 15 道基线题。
+- 首次由模型生成一批基础题。
 - 程序验证后保存到服务器端。
 - 同一 Knowledge 的所有后续空状态请求复用该基线题库。
 - 基线题目不是用户学习数据，不写入 LocalStorage LearningState。
@@ -138,10 +138,10 @@ interface TeachingStrategy {
 服务器存储通过 Storage Layer 封装，默认目录：
 
 ```text
-.data/baselines/{knowledgeId}.json
+.data/question-pools/{knowledgeId}__{subtopicId}.json
 ```
 
-可通过 `BASELINE_STORAGE_DIR` 覆盖。
+可通过 `QUESTION_POOL_DIR` 覆盖。
 
 ## 5. 教学输出顺序
 
