@@ -373,11 +373,9 @@ export function validateQuestionBatch(
     if (!pattern) {
       throw new AgentValidationError(`未知 patternId：${question.patternId}`);
     }
-    if (question.knowledgeSubtopic !== pattern.subtopicId) {
-      throw new AgentValidationError(
-        `题目 subtopic 与 Pattern 不匹配：${question.patternId}`,
-      );
-    }
+    // Pattern 是比 subtopic 字符串更可信的结构信息。模型即使写错
+    // knowledgeSubtopic，也由程序按 patternId 自动纠正。
+    question.knowledgeSubtopic = pattern.subtopicId;
     if (
       pattern.coverageItems?.length &&
       (!question.coverageItemId ||

@@ -5,6 +5,7 @@ import {
   applyBatchToPatternProgress,
   boundStrategyBatchSize,
   enforceRequiredPatternCoverage,
+  forceFinishOnPerfectBatch,
 } from "@/lib/agent/coverage";
 import {
   createQuestionPoolStrategy,
@@ -152,8 +153,17 @@ async function generateValidatedStrategy(
     teachingStrategyPublicSchema,
     context,
   );
-  const coverageBounded = enforceRequiredPatternCoverage(
+  const forced = forceFinishOnPerfectBatch(
     generated as TeachingStrategy,
+    context.knowledge,
+    context.observation,
+  );
+  if (forced.action === "finish") {
+    return validateTeachingStrategy(forced, context.knowledge);
+  }
+
+  const coverageBounded = enforceRequiredPatternCoverage(
+    forced,
     context.knowledge,
     context.observation.patternProgress,
   );

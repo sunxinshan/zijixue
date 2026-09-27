@@ -244,3 +244,37 @@ export function boundStrategyBatchSize(
       .map(([patternId, count]) => ({ patternId, count })),
   };
 }
+
+export function forceFinishOnPerfectBatch(
+  strategy: TeachingStrategy,
+  knowledge: Knowledge,
+  observation: BatchObservation,
+): TeachingStrategy {
+  const patterns = knowledge.subtopics.flatMap((subtopic) => subtopic.patterns);
+  const requiredPatternIds = patterns
+    .filter((pattern) => pattern.required)
+    .map((pattern) => pattern.id);
+  const attemptedPatternIds = new Set(
+    observation.currentBatch.patternStats.map((item) => item.patternId),
+  );
+  const allRequiredPatternsAttempted = requiredPatternIds.every((patternId) =>
+    attemptedPatternIds.has(patternId),
+  );
+  const perfectBatch =
+    observation.currentBatch.total > 0 &&
+    observation.currentBatch.correct === observation.currentBatch.total;
+
+  if (!perfectBatch || !allRequiredPatternsAttempted) return strategy;
+
+  return {
+    ...strategy,
+    diagnosis: "mastered",
+    strategyLevel: 5,
+    action: "finish",
+    focus: [],
+    questionDistribution: [],
+    explanation: undefined,
+    examples: undefined,
+    reason: "当前批次全部答对，且所有 required Pattern 均已覆盖，直接通过。",
+  };
+}

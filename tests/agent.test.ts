@@ -333,3 +333,69 @@ test("高正确率且 Coverage 完成时下一批压缩为 5 题以内", async (
   assert.ok(total <= 5);
   assert.ok(total >= 3);
 });
+
+test("最后批次全对且 Coverage 完成时强制 finish", async () => {
+  const { forceFinishOnPerfectBatch } = await import("@/lib/agent/coverage");
+  const knowledge = scopedKnowledge("as-as");
+  const patterns = knowledge.subtopics.flatMap((subtopic) => subtopic.patterns);
+  const strategy: TeachingStrategy = {
+    diagnosis: "improving",
+    strategyLevel: 2,
+    action: "mixed_review",
+    focus: ["as-as"],
+    difficulty: 2,
+    questionDistribution: [{ patternId: "as-as", count: 5 }],
+    reason: "继续复习。",
+  };
+  const observation: BatchObservation = {
+    batchNumber: 2,
+    currentBatch: performance(2, {
+      "as-as": { correct: 5, total: 5 },
+      "not-as-as": { correct: 5, total: 5 },
+    }),
+    pastBatches: [],
+    previousStrategies: [],
+    patternProgress: Object.fromEntries(
+      patterns.map((pattern) => [
+        pattern.id,
+        {
+          patternId: pattern.id,
+          attemptedQuestions: 5,
+          correctQuestions: 5,
+          coveredItems: pattern.coverageItems ?? [],
+          coverageComplete: true,
+        },
+      ]),
+    ),
+    consecutivePatternErrors: {},
+  };
+
+  const forced = forceFinishOnPerfectBatch(strategy, knowledge, observation);
+  assert.equal(forced.action, "finish");
+  assert.equal(forced.diagnosis, "mastered");
+  assert.deepEqual(forced.questionDistribution, []);
+});
+
+test("Validator 以 patternId 自动纠正 knowledgeSubtopic", () => {
+  const knowledge = scopedKnowledge("as-as");
+  const questions = Array.from({ length: 10 }, (_, index) => ({
+    id: `as-as-${index}`,
+    type: "choice" as const,
+    question: `请选择同级比较形式 ${index}`,
+    options: ["as big as", "bigger than", "more big"],
+    answer: "as big as",
+    explanation: "同级比较使用 as...as。",
+    knowledgeId: "comparative",
+    knowledgeSubtopic: "wrong-subtopic",
+    patternId: "as-as",
+    coverageItemId: "big",
+    difficulty: 1 as const,
+  }));
+
+  const validated = validateQuestionBatch({ questions }, knowledge);
+  assert.ok(
+    validated.questions.every(
+      (question) => question.knowledgeSubtopic === "as-as",
+    ),
+  );
+});

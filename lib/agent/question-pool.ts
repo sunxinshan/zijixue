@@ -213,7 +213,11 @@ export async function getOrCreateQuestionPoolBatch(input: {
       previous,
     ),
   );
-  return randomizeChoiceOptionPositions({ questions: selected });
+  const normalized = validateQuestionBatch(
+    { questions: selected },
+    input.knowledge,
+  );
+  return randomizeChoiceOptionPositions(normalized);
 }
 
 export function createQuestionPoolStrategy(

@@ -60,7 +60,7 @@ export function buildBatchGenerationPrompt(context: BatchGenerationContext): str
 - 必须生成题目数量等于 questionDistribution 的 count 总和。
 - 只允许 choice 和 true-false。
 - 每道题必须属于 knowledgeId="${context.knowledge.id}"。
-- 每道题必须同时填写 knowledgeSubtopic 和 patternId。
+- 每道题必须同时填写 knowledgeSubtopic 和 patternId；程序会始终以 patternId 对应的 Subtopic 为准。
 - patternId 必须来自当前允许的 Patterns。
 - 必须严格符合 questionDistribution 中每个 Pattern 的 count，不要额外增加或减少题目。
 - 如果 Pattern 定义了 coverageItems，必须使用 coverageItemId 标记覆盖项。
