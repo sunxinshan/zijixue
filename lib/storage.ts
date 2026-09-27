@@ -235,21 +235,28 @@ export function isChallengeUnlocked(
   );
 }
 
+export function mergeLearningState(
+  states: LearningState[],
+  state: LearningState,
+): LearningState[] {
+  return [
+    ...states.filter(
+      (item) =>
+        !(
+          item.knowledgeId === state.knowledgeId &&
+          item.scope === state.scope &&
+          item.subtopicId === state.subtopicId
+        ),
+    ),
+    state,
+  ];
+}
+
 export function upsertLearningState(state: LearningState): AppStorage {
   const current = loadAgentStorage();
   const next = {
     ...current,
-    learningStates: [
-      ...current.learningStates.filter(
-        (item) =>
-          !(
-            item.knowledgeId === state.knowledgeId &&
-            item.scope === state.scope &&
-            item.subtopicId === state.subtopicId
-          ),
-      ),
-      state,
-    ],
+    learningStates: mergeLearningState(current.learningStates, state),
   };
   saveAgentStorage(next);
   return next;
@@ -300,12 +307,10 @@ export function completeSession(
   const completedAt = Date.now();
   const next = {
     ...current,
-    learningStates: [
-      ...current.learningStates.filter(
-        (state) => state.knowledgeId !== learningState.knowledgeId,
-      ),
+    learningStates: mergeLearningState(
+      current.learningStates,
       learningState,
-    ],
+    ),
     sessions: current.sessions.map((session) =>
       session.id === sessionId
         ? {
