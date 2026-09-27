@@ -126,13 +126,13 @@ export const llmQuestionSchema = z.object({
   id: z.string().min(1),
   type: z.enum(["choice", "true-false"]),
   question: z.string().min(1),
-  options: z.array(z.string().min(1)).optional(),
+  options: z.array(z.string().min(1)).nullable().optional(),
   answer: z.union([z.string(), z.boolean()]),
   explanation: z.string().min(1),
   knowledgeId: z.string().min(1),
   knowledgeSubtopic: z.string().min(1),
   patternId: z.string().min(1),
-  coverageItemId: z.string().optional(),
+  coverageItemId: z.string().nullable().optional(),
   difficulty: scoreLevelSchema,
 });
 
@@ -324,7 +324,12 @@ export function validateQuestionBatch(
     throw new AgentValidationError(`题目结构无效：${parsed.error.message}`);
   }
 
-  const questions = parsed.data.questions;
+  const questions: Question[] = parsed.data.questions.map((question) => ({
+    ...question,
+    options: question.options ?? undefined,
+    coverageItemId: question.coverageItemId ?? undefined,
+    difficulty: question.difficulty as Difficulty,
+  }));
   if (questions.length !== QUESTIONS_PER_BATCH) {
     throw new AgentValidationError(
       `题目数量必须为 ${QUESTIONS_PER_BATCH}，实际为 ${questions.length}`,

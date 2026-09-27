@@ -257,3 +257,28 @@ test("deepseek Provider 使用可配置模型和兼容接口", () => {
   if (previous.baseUrl === undefined) delete process.env.LLM_BASE_URL;
   else process.env.LLM_BASE_URL = previous.baseUrl;
 });
+
+test("Validator 将模型返回的 coverageItemId=null 规范化为 undefined", () => {
+  const knowledge = scopedKnowledge("comparative-basic");
+  const questions = Array.from({ length: 15 }, (_, index) => ({
+    id: `null-coverage-${index}`,
+    type: "choice" as const,
+    question: `Tom is taller than Ken ${index}`,
+    options: ["than", "as", "of"],
+    answer: "than",
+    explanation: "比较级后用 than。",
+    knowledgeId: "comparative",
+    knowledgeSubtopic: "comparative-basic",
+    patternId: "comparative-than",
+    coverageItemId: null,
+    difficulty: 1 as const,
+  }));
+
+  const validated = validateQuestionBatch({ questions }, knowledge);
+  assert.equal(validated.questions.length, 15);
+  assert.ok(
+    validated.questions.every(
+      (question) => question.coverageItemId === undefined,
+    ),
+  );
+});
