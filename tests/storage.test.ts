@@ -6,6 +6,7 @@ import {
   createInitialAgentStorage,
   mergeLearningState,
   migrateLegacyStorage,
+  recoverMissingSubtopicStates,
 } from "@/lib/storage";
 
 test("v2 Storage 使用 LearningState、Session、Attempt、Question 四类数据", () => {
@@ -77,4 +78,63 @@ test("完成一个 Subtopic 不会覆盖其他 Subtopic LearningState", () => {
     merged.find((state) => state.subtopicId === "superlative-basic")?.mastery,
     90,
   );
+});
+
+test("缺失的 Subtopic LearningState 可从完成 Session 恢复", () => {
+  const storage = createInitialAgentStorage();
+  const question = {
+    id: "q1",
+    type: "choice" as const,
+    question: "选择正确的词",
+    options: ["the", "a"],
+    answer: "the",
+    explanation: "最高级前用 the",
+    knowledgeId: "comparative",
+    knowledgeSubtopic: "superlative-basic",
+    patternId: "superlative-the",
+    difficulty: 1 as const,
+  };
+  const recovered = recoverMissingSubtopicStates({
+    ...storage,
+    sessions: [
+      {
+        id: "session-1",
+        userId: "local-user",
+        knowledgeId: "comparative",
+        mode: "subtopic",
+        subtopicId: "superlative-basic",
+        startedAt: 1,
+        endedAt: 2,
+        status: "completed",
+        sessionSummary: {
+          mastery: 80,
+          strengths: ["the + 最高级"],
+          weaknesses: [],
+          recommendedFocus: [],
+          summary: "恢复测试",
+        },
+      },
+    ],
+    questions: [question],
+    attempts: [
+      {
+        id: "a1",
+        sessionId: "session-1",
+        knowledgeId: "comparative",
+        subtopicId: "superlative-basic",
+        patternId: "superlative-the",
+        questionId: "q1",
+        answer: "the",
+        correct: true,
+        timestamp: 2,
+      },
+    ],
+  });
+
+  const state = recovered.learningStates.find(
+    (item) => item.subtopicId === "superlative-basic",
+  );
+  assert.ok(state);
+  assert.equal(state.mastery, 80);
+  assert.equal(state.patternProgress["superlative-the"].attemptedQuestions, 1);
 });

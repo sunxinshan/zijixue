@@ -1,7 +1,11 @@
+import { getKnowledge, getSubtopic } from "@/data/knowledge/comparative";
+import { applyBatchToPatternProgress } from "@/lib/agent/coverage";
+import { createInitialLearningState } from "@/lib/mastery";
 import type {
   AppStorage,
   Knowledge,
   Attempt,
+  Difficulty,
   LearningSession,
   LearningState,
   Question,
@@ -86,6 +90,87 @@ export function migrateLegacyStorage(raw: string): AppStorage | null {
   }
 }
 
+export function recoverMissingSubtopicStates(storage: AppStorage): AppStorage {
+  const states = [...storage.learningStates];
+
+  const completedSessions = storage.sessions
+    .filter(
+      (session) =>
+        session.status === "completed" &&
+        session.mode === "subtopic" &&
+        Boolean(session.subtopicId) &&
+        Boolean(session.sessionSummary),
+    )
+    .sort((left, right) => left.startedAt - right.startedAt);
+
+  for (const session of completedSessions) {
+    const subtopicId = session.subtopicId;
+    if (!subtopicId || !session.sessionSummary) continue;
+    if (
+      states.some(
+        (state) =>
+          state.knowledgeId === session.knowledgeId &&
+          state.scope === "subtopic" &&
+          state.subtopicId === subtopicId,
+      )
+    ) {
+      continue;
+    }
+
+    const knowledge = getKnowledge(session.knowledgeId);
+    const subtopic = knowledge ? getSubtopic(knowledge, subtopicId) : undefined;
+    if (!knowledge || !subtopic) continue;
+
+    const attempts = storage.attempts.filter(
+      (attempt) => attempt.sessionId === session.id,
+    );
+    const questionIds = new Set(attempts.map((attempt) => attempt.questionId));
+    const questions = storage.questions.filter((question) =>
+      questionIds.has(question.id),
+    );
+    const patternProgress = applyBatchToPatternProgress(
+      subtopic.patterns,
+      questions,
+      attempts,
+    );
+    const totalAttempted = Object.values(patternProgress).reduce(
+      (sum, progress) => sum + progress.attemptedQuestions,
+      0,
+    );
+    const coverageComplete = subtopic.patterns.every(
+      (pattern) =>
+        !pattern.required || patternProgress[pattern.id]?.coverageComplete,
+    );
+    const maxDifficulty = questions.reduce<Difficulty>(
+      (max, question) =>
+        Math.max(max, question.difficulty) as Difficulty,
+      1,
+    );
+    const state = createInitialLearningState(
+      session.userId,
+      session.knowledgeId,
+      session.endedAt ?? session.startedAt,
+      "subtopic",
+      subtopicId,
+    );
+
+    states.push({
+      ...state,
+      mastery: session.sessionSummary.mastery,
+      strengths: session.sessionSummary.strengths,
+      weaknesses: session.sessionSummary.weaknesses,
+      recommendedFocus: session.sessionSummary.recommendedFocus,
+      currentDifficulty: maxDifficulty,
+      patternProgress,
+      completed:
+        coverageComplete && totalAttempted >= subtopic.minimumQuestions,
+      summary: session.sessionSummary.summary,
+    });
+  }
+
+  return { ...storage, learningStates: states };
+}
+
 function parseAgentStorage(raw: string | null): AppStorage {
   if (!raw) return createInitialAgentStorage();
 
@@ -95,7 +180,7 @@ function parseAgentStorage(raw: string | null): AppStorage {
       throw new Error("unsupported storage version");
     }
 
-    return {
+    const normalized: AppStorage = {
       version: 2,
       userId: parsed.userId ?? "local-user",
       learningStates: Array.isArray(parsed.learningStates)
@@ -118,6 +203,7 @@ function parseAgentStorage(raw: string | null): AppStorage {
       legacyXp: parsed.legacyXp,
       legacyStars: parsed.legacyStars,
     };
+    return recoverMissingSubtopicStates(normalized);
   } catch {
     return createInitialAgentStorage();
   }
