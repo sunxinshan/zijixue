@@ -154,8 +154,12 @@ async function generateValidatedStrategy(
     teachingStrategyPublicSchema,
     context,
   );
+  const initialStrategy = validateTeachingStrategy(
+    generated,
+    context.knowledge,
+  );
   const forced = forceFinishOnPerfectBatch(
-    generated as TeachingStrategy,
+    initialStrategy,
     context.knowledge,
     context.observation,
   );

@@ -215,6 +215,46 @@ export class AgentValidationError extends Error {
   }
 }
 
+function normalizeStrategyPayload(value: unknown): unknown {
+  if (!value || typeof value !== "object") return value;
+  const source = value as Record<string, unknown>;
+  const normalized: Record<string, unknown> = { ...source };
+
+  if (typeof source.focus === "string") {
+    normalized.focus = [source.focus];
+  }
+
+  const distribution = source.questionDistribution;
+  if (Array.isArray(distribution)) {
+    normalized.questionDistribution = distribution.map((item) => {
+      if (!item || typeof item !== "object") return item;
+      const entry = item as Record<string, unknown>;
+      return {
+        ...entry,
+        patternId:
+          entry.patternId ?? entry.pattern ?? entry.subtopic ?? entry.id,
+        count:
+          typeof entry.count === "number"
+            ? entry.count
+            : Number(entry.count ?? 0),
+      };
+    });
+  } else if (distribution && typeof distribution === "object") {
+    normalized.questionDistribution = Object.entries(
+      distribution as Record<string, unknown>,
+    ).map(([patternId, count]) => ({
+      patternId,
+      count: typeof count === "number" ? count : Number(count),
+    }));
+  }
+
+  if (Array.isArray(source.examples)) {
+    normalized.examples = normalizeStrategyExamples(source.examples);
+  }
+
+  return normalized;
+}
+
 function normalizeQuestionText(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").replace(/[?.!,，。！？]/g, "").trim();
 }
@@ -247,7 +287,7 @@ export function validateTeachingStrategy(
   value: unknown,
   knowledge: Knowledge,
 ): TeachingStrategy {
-  const parsed = teachingStrategySchema.safeParse(value);
+  const parsed = teachingStrategySchema.safeParse(normalizeStrategyPayload(value));
   if (!parsed.success) {
     throw new AgentValidationError(`TeachingStrategy 无效：${parsed.error.message}`);
   }

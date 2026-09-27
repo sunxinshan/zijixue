@@ -96,8 +96,7 @@ test("首个用户生成 QuestionPool，第二个用户直接复用", async () =
   assert.equal(calls, 1);
   assert.equal(firstPools.length, subtopic.patterns.length);
   assert.equal(secondPools.length, subtopic.patterns.length);
-  assert.ok(firstBatch.questions.length >= 3);
-  assert.ok(firstBatch.questions.length <= 20);
+  assert.ok(firstBatch.questions.length >= subtopic.minimumQuestions);
 });
 
 test("Subtopic 启动图只看到当前 Subtopic 的 Patterns", async () => {
@@ -121,8 +120,10 @@ test("Subtopic 启动图只看到当前 Subtopic 的 Patterns", async () => {
     createMemoryQuestionPoolRepository(),
   );
 
-  assert.ok(started.batch.questions.length >= 3);
-  assert.ok(started.batch.questions.length <= 20);
+  assert.ok(
+    started.batch.questions.length >=
+      (getSubtopic(comparativeKnowledge, "form-change")?.minimumQuestions ?? 0),
+  );
   assert.ok(
     started.batch.questions.every(
       (question) => question.knowledgeSubtopic === "form-change",

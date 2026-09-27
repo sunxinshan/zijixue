@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 import {
-  MAX_QUESTIONS_PER_BATCH,
+  MAX_QUESTIONS_PER_POOL_PATTERN,
   MIN_QUESTIONS_PER_BATCH,
 } from "@/lib/game";
 import {
@@ -31,7 +31,7 @@ export const completeBatchRequestSchema = z.object({
   attempts: z
     .array(attemptSchema)
     .min(MIN_QUESTIONS_PER_BATCH)
-    .max(MAX_QUESTIONS_PER_BATCH),
+    .max(MAX_QUESTIONS_PER_POOL_PATTERN),
   currentBatch: questionBatchPublicSchema,
   batchNumber: z.number().int().min(1),
   pastBatches: z.array(batchPerformanceSchema).default([]),

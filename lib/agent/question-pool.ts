@@ -9,7 +9,6 @@ import {
   questionBatchPublicSchema,
   validateQuestionBatch,
 } from "@/lib/agent/validation";
-import { MAX_QUESTIONS_PER_BATCH, MIN_QUESTIONS_PER_BATCH } from "@/lib/game";
 import type {
   BatchGenerationContext,
   Knowledge,
@@ -34,10 +33,35 @@ function poolTargetCount(pattern: Pattern): number {
   );
 }
 
-function createPoolDistribution(patterns: Pattern[]): QuestionDistributionItem[] {
+function createPoolTargetCounts(subtopic: Subtopic): Map<string, number> {
+  const counts = new Map(
+    subtopic.patterns.map((pattern) => [pattern.id, poolTargetCount(pattern)]),
+  );
+  let total = Array.from(counts.values()).reduce((sum, count) => sum + count, 0);
+  const order = [...subtopic.patterns].sort((left, right) => {
+    const leftWeight = left.coverageItems?.length ?? 0;
+    const rightWeight = right.coverageItems?.length ?? 0;
+    return rightWeight - leftWeight;
+  });
+
+  let index = 0;
+  while (total < subtopic.minimumQuestions && order.length > 0) {
+    const pattern = order[index % order.length];
+    counts.set(pattern.id, (counts.get(pattern.id) ?? 0) + 1);
+    total += 1;
+    index += 1;
+  }
+  return counts;
+}
+
+function createPoolDistribution(
+  subtopic: Subtopic,
+  patterns: Pattern[] = subtopic.patterns,
+): QuestionDistributionItem[] {
+  const targetCounts = createPoolTargetCounts(subtopic);
   return patterns.map((pattern) => ({
     patternId: pattern.id,
-    count: poolTargetCount(pattern),
+    count: targetCounts.get(pattern.id) ?? poolTargetCount(pattern),
   }));
 }
 
@@ -77,7 +101,7 @@ async function generateMissingPools(input: {
   provider: LLMProvider;
   repository: QuestionPoolRepository;
 }): Promise<QuestionPool[]> {
-  const distribution = createPoolDistribution(input.missingPatterns);
+  const distribution = createPoolDistribution(input.subtopic, input.missingPatterns);
   const strategy: TeachingStrategy = {
     diagnosis: "accidental",
     strategyLevel: 1,
@@ -136,8 +160,13 @@ export async function ensureQuestionPools(input: {
   repository?: QuestionPoolRepository;
 }): Promise<QuestionPool[]> {
   const repository = input.repository ?? defaultRepository;
+  const targetCounts = createPoolTargetCounts(input.subtopic);
   const existing = await repository.getPools(input.knowledge.id, input.subtopic.id);
-  const usable = existing.filter((pool) => isPoolUsable(pool, input.knowledge));
+  const usable = existing.filter(
+    (pool) =>
+      isPoolUsable(pool, input.knowledge) &&
+      pool.questions.length >= (targetCounts.get(pool.patternId) ?? 1),
+  );
   const usablePatterns = new Set(usable.map((pool) => pool.patternId));
   const missing = input.subtopic.patterns.filter(
     (pattern) => !usablePatterns.has(pattern.id),
@@ -161,25 +190,12 @@ export async function ensureQuestionPools(input: {
   return task;
 }
 
-function createSelectionDistribution(patterns: Pattern[]): QuestionDistributionItem[] {
-  const counts = new Map(patterns.map((pattern) => [pattern.id, 1]));
-  const target = Math.min(
-    MAX_QUESTIONS_PER_BATCH,
-    Math.max(MIN_QUESTIONS_PER_BATCH, patterns.length * 2),
+function createSelectionDistribution(
+  subtopic: Subtopic,
+): QuestionDistributionItem[] {
+  return Array.from(createPoolTargetCounts(subtopic).entries()).map(
+    ([patternId, count]) => ({ patternId, count }),
   );
-  let assigned = counts.size;
-  let index = 0;
-  const order = patterns.map((pattern) => pattern.id);
-  while (assigned < target && order.length > 0) {
-    const patternId = order[index % order.length];
-    counts.set(patternId, (counts.get(patternId) ?? 0) + 1);
-    assigned += 1;
-    index += 1;
-  }
-  return Array.from(counts.entries()).map(([patternId, count]) => ({
-    patternId,
-    count,
-  }));
 }
 
 function pickFromPool(
@@ -204,7 +220,7 @@ export async function getOrCreateQuestionPoolBatch(input: {
   previousQuestions?: string[];
 }): Promise<QuestionBatch> {
   const pools = await ensureQuestionPools(input);
-  const distribution = createSelectionDistribution(input.subtopic.patterns);
+  const distribution = createSelectionDistribution(input.subtopic);
   const previous = new Set(input.previousQuestions ?? []);
   const selected = distribution.flatMap((item) =>
     pickFromPool(

@@ -449,3 +449,28 @@ test("弱 Pattern 下一批至少补齐达到目标正确数所需的题量", as
       ?.count ?? 0) >= 2,
   );
 });
+
+test("questionDistribution 对象格式会规范化为数组", () => {
+  const strategy = validateTeachingStrategy(
+    {
+      diagnosis: "subtopic_weakness",
+      strategyLevel: 2,
+      action: "targeted_practice",
+      focus: "as-as",
+      difficulty: 2,
+      questionDistribution: {
+        "as-as": 3,
+        "not-as-as": 3,
+      },
+      reason: "对象格式兼容测试",
+    },
+    scopedKnowledge("as-as"),
+  );
+
+  assert.deepEqual(strategy.focus, ["as-as"]);
+  assert.equal(strategy.questionDistribution.length, 2);
+  assert.equal(
+    strategy.questionDistribution.reduce((sum, item) => sum + item.count, 0),
+    6,
+  );
+});
