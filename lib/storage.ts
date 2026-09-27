@@ -216,8 +216,20 @@ export function getAgentStorageSnapshot(): AppStorage {
   if (raw === cachedRawStorage && cachedStorage) return cachedStorage;
 
   if (raw) {
-    cachedRawStorage = raw;
+    const parsedRaw = JSON.parse(raw) as Partial<AppStorage>;
     cachedStorage = parseAgentStorage(raw);
+    if (
+      cachedStorage.learningStates.length >
+      (Array.isArray(parsedRaw.learningStates)
+        ? parsedRaw.learningStates.length
+        : 0)
+    ) {
+      const recoveredRaw = JSON.stringify(cachedStorage);
+      window.localStorage.setItem(STORAGE_KEY, recoveredRaw);
+      cachedRawStorage = recoveredRaw;
+    } else {
+      cachedRawStorage = raw;
+    }
     return cachedStorage;
   }
 
