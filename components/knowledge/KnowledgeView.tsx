@@ -110,7 +110,7 @@ export function KnowledgeView({ knowledge }: { knowledge: Knowledge }) {
               href={`/game/${knowledge.id}`}
               className="mt-5 flex min-h-14 items-center justify-center rounded-2xl bg-[#8a5a00] px-6 font-black text-white shadow-lg"
             >
-              开始 Knowledge Challenge
+              通关挑战
             </Link>
           ) : (
             <div className="mt-5 rounded-2xl bg-[#f8fbf5] px-5 py-4 text-center text-sm font-black text-[#74887b]">

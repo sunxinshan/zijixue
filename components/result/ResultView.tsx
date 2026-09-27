@@ -105,6 +105,12 @@ export function ResultView({
   const summary = view.session.sessionSummary;
   const masteryMeta = getMasteryMeta(summary.mastery);
   const stars = calculateStars(view.stats.correct, view.stats.total);
+  const retryHref =
+    view.session.mode === "subtopic" && view.session.subtopicId
+      ? `/game/${knowledge.id}/${view.session.subtopicId}`
+      : `/game/${knowledge.id}`;
+  const retryLabel =
+    view.session.mode === "subtopic" ? "再练一次" : "重新挑战";
   const focusTitles = summary.recommendedFocus
     .map(
       (id) =>
@@ -268,10 +274,10 @@ export function ResultView({
 
         <div className="mt-5 grid gap-3 sm:grid-cols-2">
           <Link
-            href={`/game/${knowledge.id}`}
+            href={retryHref}
             className="flex min-h-14 items-center justify-center rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-6 font-black text-white shadow-lg transition hover:-translate-y-0.5"
           >
-            开始新 Session
+            {retryLabel}
           </Link>
           <Link
             href="/"
