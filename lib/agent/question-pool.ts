@@ -255,3 +255,90 @@ export function createQuestionPoolStrategy(
     reason: "新 LearningState 使用服务器端公共 QuestionPool。",
   };
 }
+
+export async function getOrCreateAdaptiveQuestionBatch(input: {
+  knowledge: Knowledge;
+  learningState: LearningState;
+  strategy: TeachingStrategy;
+  provider: LLMProvider;
+  repository?: QuestionPoolRepository;
+  batchNumber: number;
+  previousQuestions: string[];
+}): Promise<QuestionBatch> {
+  const repository = input.repository ?? defaultRepository;
+  const pools: QuestionPool[] = [];
+
+  for (const subtopic of input.knowledge.subtopics) {
+    pools.push(
+      ...(await ensureQuestionPools({
+        knowledge: input.knowledge,
+        subtopic,
+        provider: input.provider,
+        repository,
+      })),
+    );
+  }
+
+  const previous = new Set(input.previousQuestions);
+  const selected: Question[] = [];
+  const missingDistribution: QuestionDistributionItem[] = [];
+
+  for (const item of input.strategy.questionDistribution) {
+    const pool = pools.find((entry) => entry.patternId === item.patternId);
+    const picked = pickFromPool(pool, item.count, previous);
+    selected.push(...picked);
+    picked.forEach((question) => previous.add(question.question));
+    if (picked.length < item.count) {
+      missingDistribution.push({
+        patternId: item.patternId,
+        count: item.count - picked.length,
+      });
+    }
+  }
+
+  if (missingDistribution.length > 0) {
+    const missingStrategy: TeachingStrategy = {
+      ...input.strategy,
+      questionDistribution: missingDistribution,
+    };
+    const context: BatchGenerationContext = {
+      task: "generate_question_batch",
+      knowledge: input.knowledge,
+      learningState: input.learningState,
+      strategy: missingStrategy,
+      batchNumber: input.batchNumber,
+      previousQuestions: Array.from(previous),
+    };
+
+    let generated: QuestionBatch | null = null;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      const candidate = await input.provider.generate(
+        buildBatchGenerationPrompt(context),
+        questionBatchPublicSchema,
+        context,
+      );
+      if (candidate.questions.length > 0) {
+        generated = candidate;
+        break;
+      }
+    }
+
+    if (!generated || generated.questions.length === 0) {
+      throw new Error("超级大脑连续两次没有返回补充题目");
+    }
+
+    const validatedMissing = validateQuestionBatch(
+      generated,
+      input.knowledge,
+      missingDistribution,
+    );
+    selected.push(...validatedMissing.questions);
+  }
+
+  const normalized = validateQuestionBatch(
+    { questions: selected },
+    input.knowledge,
+    input.strategy.questionDistribution,
+  );
+  return randomizeChoiceOptionPositions(normalized);
+}

@@ -344,3 +344,38 @@ export function enforceWeakPatternMinimums(
       .map(([patternId, count]) => ({ patternId, count })),
   };
 }
+
+export function ensureStartStrategyCanGenerate(
+  strategy: TeachingStrategy,
+  knowledge: Knowledge,
+): TeachingStrategy {
+  const total = strategy.questionDistribution.reduce(
+    (sum, item) => sum + item.count,
+    0,
+  );
+  if (strategy.action !== "finish" && total > 0) return strategy;
+
+  const patterns = knowledge.subtopics.flatMap((subtopic) => subtopic.patterns);
+  const target = Math.min(
+    MAX_QUESTIONS_PER_BATCH,
+    Math.max(MIN_QUESTIONS_PER_BATCH, patterns.length),
+  );
+  const counts = new Map(patterns.map((pattern) => [pattern.id, 0]));
+  for (let index = 0; index < target; index += 1) {
+    const patternId = patterns[index % patterns.length]?.id;
+    if (!patternId) break;
+    counts.set(patternId, (counts.get(patternId) ?? 0) + 1);
+  }
+
+  return {
+    ...strategy,
+    diagnosis: "mastered",
+    strategyLevel: 5,
+    action: "mixed_review",
+    focus: patterns.map((pattern) => pattern.id),
+    questionDistribution: Array.from(counts.entries())
+      .filter(([, count]) => count > 0)
+      .map(([patternId, count]) => ({ patternId, count })),
+    reason: "进入关卡前先完成一轮混合验证，避免无题可练。",
+  };
+}

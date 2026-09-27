@@ -501,3 +501,27 @@ test("判断题带布尔 options 时会自动移除 options", () => {
   assert.equal(validated.questions[0].options, undefined);
   assert.equal(validated.questions[0].answer, true);
 });
+
+test("启动阶段收到 finish 时会转换为混合验证批次", async () => {
+  const { ensureStartStrategyCanGenerate } = await import("@/lib/agent/coverage");
+  const strategy: TeachingStrategy = {
+    diagnosis: "mastered",
+    strategyLevel: 5,
+    action: "finish",
+    focus: [],
+    difficulty: 2,
+    questionDistribution: [],
+    reason: "已经掌握。",
+  };
+  const adjusted = ensureStartStrategyCanGenerate(
+    strategy,
+    comparativeKnowledge,
+  );
+  const total = adjusted.questionDistribution.reduce(
+    (sum, item) => sum + item.count,
+    0,
+  );
+  assert.equal(adjusted.action, "mixed_review");
+  assert.ok(total > 0);
+  assert.ok(total <= 20);
+});

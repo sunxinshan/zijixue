@@ -6,31 +6,29 @@ import {
   boundStrategyBatchSize,
   enforceRequiredPatternCoverage,
   enforceWeakPatternMinimums,
+  ensureStartStrategyCanGenerate,
   forceFinishOnPerfectBatch,
 } from "@/lib/agent/coverage";
 import {
   createQuestionPoolStrategy,
+  getOrCreateAdaptiveQuestionBatch,
   getOrCreateQuestionPoolBatch,
 } from "@/lib/agent/question-pool";
 import type { QuestionPoolRepository } from "@/lib/agent/question-pool-store";
 import type { LLMProvider } from "@/lib/agent/llm";
 import { createLLMProvider } from "@/lib/agent/provider";
 import {
-  buildBatchGenerationPrompt,
   buildSessionSummaryPrompt,
   buildTeachingStrategyPrompt,
 } from "@/lib/agent/prompts";
 import {
   AgentValidationError,
-  questionBatchPublicSchema,
   sessionSummaryPublicSchema,
   teachingStrategyPublicSchema,
-  validateQuestionBatch,
   validateSessionSummary,
   validateTeachingStrategy,
 } from "@/lib/agent/validation";
 import { createLocalId } from "@/lib/game";
-import { randomizeChoiceOptionPositions } from "@/lib/agent/question-options";
 import { buildLearningStateFromSummary } from "@/lib/mastery";
 import type {
   Attempt,
@@ -190,18 +188,17 @@ async function generateValidatedStrategy(
 async function generateValidatedBatch(
   provider: LLMProvider,
   context: BatchGenerationContext,
+  repository?: QuestionPoolRepository,
 ): Promise<QuestionBatch> {
-  const generated = await provider.generate(
-    buildBatchGenerationPrompt(context),
-    questionBatchPublicSchema,
-    context,
-  );
-  const validated = validateQuestionBatch(
-    generated,
-    context.knowledge,
-    context.strategy.questionDistribution,
-  );
-  return randomizeChoiceOptionPositions(validated);
+  return getOrCreateAdaptiveQuestionBatch({
+    knowledge: context.knowledge,
+    learningState: context.learningState,
+    strategy: context.strategy,
+    provider,
+    repository,
+    batchNumber: context.batchNumber,
+    previousQuestions: context.previousQuestions,
+  });
 }
 
 function createStartGraph(
@@ -268,7 +265,10 @@ function createStartGraph(
       observation: state.observation,
     };
     return {
-      strategy: await generateValidatedStrategy(provider, context),
+      strategy: ensureStartStrategyCanGenerate(
+        await generateValidatedStrategy(provider, context),
+        context.knowledge,
+      ),
     };
   };
 
@@ -292,7 +292,11 @@ function createStartGraph(
       batchNumber: 1,
       previousQuestions: [],
     };
-    const validated = await generateValidatedBatch(provider, context);
+    const validated = await generateValidatedBatch(
+      provider,
+      context,
+      questionPoolRepository,
+    );
     return {
       currentBatch: assignProgramQuestionIds(
         validated,
@@ -315,7 +319,10 @@ function createStartGraph(
     .compile();
 }
 
-function createCompletionGraph(provider: LLMProvider) {
+function createCompletionGraph(
+  provider: LLMProvider,
+  questionPoolRepository?: QuestionPoolRepository,
+) {
   const recordAttempt = async (state: typeof CompletionGraphState.State) => {
     const expectedIds = new Set(
       state.currentBatch.questions.map((question) => question.id),
@@ -410,7 +417,11 @@ function createCompletionGraph(provider: LLMProvider) {
       batchNumber: state.batchNumber + 1,
       previousQuestions: state.previousQuestions,
     };
-    const validated = await generateValidatedBatch(provider, context);
+    const validated = await generateValidatedBatch(
+      provider,
+      context,
+      questionPoolRepository,
+    );
     return {
       nextBatch: assignProgramQuestionIds(
         validated,
@@ -535,8 +546,9 @@ export interface CompleteBatchGraphInput {
 export async function runCompleteBatchGraph(
   input: CompleteBatchGraphInput,
   provider: LLMProvider = createLLMProvider(),
+  questionPoolRepository?: QuestionPoolRepository,
 ) {
-  const graph = createCompletionGraph(provider);
+  const graph = createCompletionGraph(provider, questionPoolRepository);
   const result = await graph.invoke(input);
 
   if (!result.strategy) {
