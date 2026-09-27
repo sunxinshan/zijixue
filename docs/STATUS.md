@@ -15,147 +15,115 @@ Subtopic
   ↓
 Pattern
   ↓
+TeachingContent
+  ↓
 Question
 ```
 
-- Knowledge 是完整场景/知识主题。
-- Subtopic 是用户看到的学习关卡。
+- Knowledge 是完整场景。
+- Subtopic 是学习关卡。
 - Pattern 是 Agent 调度的最小教学单元。
+- TeachingContent 是教材事实来源。
 - Coverage 与 Mastery 分离。
 
 ## 2. Comparative Knowledge
 
-```text
-comparative
-比较级与比较表达
+当前包含 6 个 Subtopic：
 
-├── comparative-basic 普通比较级
-├── superlative-basic 最高级
-├── form-change 比较级/最高级词形变化
-└── as-as 同级比较
-```
+- `comparative-basic`：普通比较级
+- `superlative-basic`：最高级
+- `comparative-form-rules`：比较级和最高级变化规则
+- `comparative-more-most`：more / most
+- `comparative-as-as`：as ... as / not as ... as
+- `comparative-sentence-application`：比较句型综合应用
 
-`form-change` 包含：
+所有 Subtopic 完成后才可进入 `通关挑战`。
+
+## 3. TeachingContent
+
+每个 Pattern 都包含：
+
+- concept
+- why
+- rule
+- structure
+- examples
+- usage
+- contrasts
+- commonMistakes
+- guidedExamples
+- practiceHints
+
+首次进入 Subtopic 时，UI 会按 Pattern 分步展示 TeachingContent，然后进入练习。
+
+## 4. Pattern Coverage
+
+`comparative-form-rules` 必须分别覆盖：
 
 - regular
 - e-ending
 - y-ending
 - double-consonant
-- more-most
 - irregular
+- rule-selection
 
-`irregular` 支持逐词 Coverage：
+irregular 的核心词逐项覆盖：
 
 - good
 - well
-- bad
-- little
 - many
 - much
+- bad
+- little
 
-## 3. PatternProgress
+## 5. QuestionPool
 
-```ts
-interface PatternProgress {
-  patternId: string;
-  attemptedQuestions: number;
-  correctQuestions: number;
-  coveredItems: string[];
-  coverageComplete: boolean;
-}
-```
+公共 QuestionPool 存在服务器端，通过 Repository 抽象访问。
 
-Coverage Complete 只表示测过，不表示掌握。
+- 首次 Subtopic 请求：不存在则调用 LLM 生成并保存。
+- 后续新用户：直接读取公共题库。
+- 个性化强化：优先从公共题库取题，缺少的部分才生成个性化 new questions。
+- 个性化题目不会污染公共题库。
 
-## 4. LearningState
-
-LearningState 区分：
-
-- Subtopic LearningState
-- Knowledge Challenge LearningState
-
-Subtopic LearningState 包含：
-
-- scope
-- subtopicId
-- mastery
-- strengths
-- weaknesses
-- currentDifficulty
-- recommendedFocus
-- strategyLevel
-- patternProgress
-- completed
-- summary
-- updatedAt
-
-## 5. Agent Context
-
-Subtopic 学习时，只向 Agent 注入当前 Subtopic 的：
-
-- Patterns
-- PatternProgress
-- LearningState
-- Attempts 统计
-
-不会注入其他 Subtopic 的详细状态。
-
-Challenge 时才读取整个 Knowledge 的所有 Subtopic 和 Pattern 状态。
-
-## 6. LangGraph
-
-Subtopic 启动：
+默认目录：
 
 ```text
-START
-→ load_context
-→ analyze_learning_state
-→ generate_teaching_strategy
-→ generate_question_batch
-→ END
+.data/question-pools/{knowledgeId}__{subtopicId}.json
 ```
 
-Batch 完成：
+## 6. Agent 流程
 
 ```text
-START
-→ record_attempt
-→ analyze_batch
-→ generate_teaching_strategy
-→ continue ? generate_question_batch
-           : summarize_session → save_learning_state
-→ END
+进入 Subtopic
+↓
+读取 TeachingContent
+↓
+读取当前 Subtopic LearningState
+↓
+第一次学习：分步教学 → 基础练习
+↓
+已有学习记录：定位薄弱 Pattern → 读取 TeachingContent → 少量强化
 ```
 
-## 7. Question Batch
+每道题绑定：
 
-- 每批题量由 Pattern Coverage、弱项和 TeachingStrategy 动态决定。
-- 只支持 choice / true-false。
-- Batch 不等于 Subtopic。
-- Agent 根据 Pattern Coverage 和历史表现决定 Pattern 分布。
-- required Pattern 未完成 Coverage 时优先。
-- y-ending、irregular、more-most 可增加题量。
-- 选择题正确选项位置由程序在 A/B/C/D 中均衡随机。
+```text
+knowledgeId
+subtopicId
+patternId
+```
 
-## 8. Baseline Question Cache
+## 7. 题量策略
 
-当 Subtopic LearningState 为空时：
+不再固定每个 Subtopic 15 题。
 
-- 首次由模型生成基础 Pattern 题池。
-- 程序验证后保存到服务器端。
-- 后续同 Subtopic 请求复用。
-- 非空状态进入 Pattern 动态教学。
-- 默认目录：`.data/question-pools/{knowledgeId}__{subtopicId}.json`
-- 可通过 `QUESTION_POOL_DIR` 覆盖。
+- 首次学习生成足够完成 Subtopic 的题目。
+- 弱 Pattern 自动补足达到目标正确率所需的题量。
+- 高正确率且 Coverage 完成后，下一批最多 5 题。
+- 最后一批全对且 required Pattern 已覆盖时直接 finish。
+- 普通动态强化通常为 3～20 题。
 
-## 9. Challenge
-
-- 所有 Subtopic completed 且 required Pattern Coverage 完成后解锁。
-- Challenge 混合所有 Subtopic 和 Pattern。
-- Challenge 失败后根据错误 Pattern 定位相关 Subtopic。
-- 结果页提供对应 Subtopic 的复习入口。
-
-## 10. LLM Provider
+## 8. LLM Provider
 
 支持：
 
@@ -163,7 +131,7 @@ START
 - openai
 - deepseek
 
-当前本地使用：
+当前生产使用：
 
 ```env
 LLM_PROVIDER=deepseek
@@ -171,44 +139,25 @@ LLM_MODEL=deepseek-v4-flash
 LLM_BASE_URL=https://api.deepseek.com/v1
 ```
 
-API Key 仅在服务端环境变量。
+## 9. 当前测试
 
-## 11. 测试状态
+- ESLint
+- TypeScript
+- 33 项自动化测试
+- Next.js production build
+- 真实 DeepSeek 生成与 Batch 分析
 
-自动化测试覆盖：
-
-- 四个 Subtopic 与 Pattern 数据
-- irregular 逐词 Coverage
-- Pattern 统计
-- y-ending 薄弱时增加 Pattern 题量
-- irregular 只覆盖 good 时 Coverage 不完整
-- Subtopic Context 隔离
-- Challenge 混合所有 Pattern
-- Pattern distribution 总数校验
-- 选项位置均衡随机
-- Baseline 缓存复用
-- DeepSeek Provider 配置
-
-真实 DeepSeek 已验证：
-
-- form-change 只返回六个 Pattern
-- Pattern distribution 正确
-- PatternProgress 逐项统计
-- irregular 仅覆盖 good/bad 时 `coverageComplete=false`
-- 下一批优先增加未覆盖 Pattern
-
-## 12. 当前限制
+## 10. 当前限制
 
 - active Session 刷新恢复尚未实现。
+- PatternProgress 使用 LocalStorage，未跨设备同步。
+- TeachingContent 当前主要通过首次教学页展示。
 - Challenge UI 仍是基础验收版本。
-- PatternProgress 目前使用 LocalStorage，未跨设备同步。
-- 真实模型输出仍依赖 Prompt 与 Validator 持续评估。
-- 尚未部署本次 V2 内容模型到生产环境。
 
-## 13. 下一步
+## 11. 下一步
 
-1. 在实际 UI 中完整走通四个 Subtopic 和 Challenge。
-2. 增加真实用户数据驱动的 Pattern eval。
-3. 增加 active Session 恢复。
-4. 增加更丰富的 Challenge 失败复习策略。
-5. 验证后部署到 `yidongxun.com`。
+1. 完成 6 个 Subtopic 的端到端人工体验。
+2. 增加 TeachingContent 的语音播放和逐段教学展示。
+3. 增加真实模型题目质量 eval。
+4. 增加 active Session 恢复。
+5. 验证后部署到生产环境。

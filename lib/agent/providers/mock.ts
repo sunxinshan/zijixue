@@ -340,6 +340,54 @@ function grammarQuestion(
     string,
     { question: string; options: string[]; answer: string; explanation: string }
   > = {
+    "as-as-base-form": {
+      question: "选择正确的同级比较形式。",
+      options: ["as big as", "as bigger as", "bigger as"],
+      answer: "as big as",
+      explanation: "as ... as 中间使用原级。",
+    },
+    "not-meaning": {
+      question: "哪一句表示“没有 Tom 那么高”？",
+      options: ["I am not as tall as Tom.", "I am as tall as Tom.", "I am taller than Tom."],
+      answer: "I am not as tall as Tom.",
+      explanation: "not as ... as 表示没有……那么。",
+    },
+    "application-comparative": {
+      question: "选择正确的词：A is taller ___ B.",
+      options: ["than", "as", "of"],
+      answer: "than",
+      explanation: "比较级后用 than。",
+    },
+    "application-superlative": {
+      question: "选择正确的词：A is ___ tallest of the three.",
+      options: ["the", "a", "than"],
+      answer: "the",
+      explanation: "最高级前使用 the。",
+    },
+    "application-as-as": {
+      question: "选择正确的同级比较形式。",
+      options: ["as big as", "as bigger as", "bigger than"],
+      answer: "as big as",
+      explanation: "as ... as 中间使用原级。",
+    },
+    "application-not-as-as": {
+      question: "选择正确的否定同级比较形式。",
+      options: ["not as big as", "not bigger as", "more big than"],
+      answer: "not as big as",
+      explanation: "not as ... as 表示没有……那么。",
+    },
+    "application-which-comparative": {
+      question: "选择正确的两者比较问句。",
+      options: ["Which is longer, A or B?", "Which is longest, A or B?", "Who longer A or B?"],
+      answer: "Which is longer, A or B?",
+      explanation: "Which is + 比较级, A or B?",
+    },
+    "application-which-superlative": {
+      question: "选择正确的最高级问句。",
+      options: ["Which animal is the strongest?", "Which animal is stronger?", "Who is strongest animal?"],
+      answer: "Which animal is the strongest?",
+      explanation: "Which + noun + is + the + 最高级?",
+    },
     "comparative-be": {
       question: "选择正确的词：Tom ___ taller than Ken.",
       options: ["is", "are", "has"],

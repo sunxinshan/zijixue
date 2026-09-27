@@ -4,6 +4,7 @@ import test from "node:test";
 import { createInitialLearningState } from "@/lib/mastery";
 import {
   createInitialAgentStorage,
+  expandLegacyLearningState,
   mergeLearningState,
   migrateLegacyStorage,
   recoverMissingSubtopicStates,
@@ -137,4 +138,36 @@ test("缺失的 Subtopic LearningState 可从完成 Session 恢复", () => {
   assert.ok(state);
   assert.equal(state.mastery, 80);
   assert.equal(state.patternProgress["superlative-the"].attemptedQuestions, 1);
+});
+
+test("旧 form-change LearningState 会拆分迁移到 V3 Subtopic", () => {
+  const legacy = {
+    ...createInitialLearningState(
+      "local-user",
+      "comparative",
+      Date.now(),
+      "subtopic",
+      "form-change",
+    ),
+    patternProgress: {
+      regular: {
+        patternId: "regular",
+        attemptedQuestions: 3,
+        correctQuestions: 3,
+        coveredItems: ["long", "tall", "fast"],
+        coverageComplete: true,
+      },
+      "more-most": {
+        patternId: "more-most",
+        attemptedQuestions: 4,
+        correctQuestions: 3,
+        coveredItems: ["popular", "famous"],
+        coverageComplete: true,
+      },
+    },
+  };
+  const migrated = expandLegacyLearningState(legacy);
+  assert.equal(migrated.length, 2);
+  assert.ok(migrated.some((state) => state.subtopicId === "comparative-form-rules"));
+  assert.ok(migrated.some((state) => state.subtopicId === "comparative-more-most"));
 });

@@ -12,16 +12,16 @@ test("Subtopic LearningState 初始化包含 Pattern Progress", () => {
     "comparative",
     1,
     "subtopic",
-    "form-change",
+    "comparative-form-rules",
   );
   assert.equal(state.scope, "subtopic");
-  assert.equal(state.subtopicId, "form-change");
+  assert.equal(state.subtopicId, "comparative-form-rules");
   assert.equal(state.completed, false);
   assert.deepEqual(state.patternProgress, {});
 });
 
 test("irregular 只覆盖 good 时 Coverage 不完整", () => {
-  const subtopic = getSubtopic(comparativeKnowledge, "form-change");
+  const subtopic = getSubtopic(comparativeKnowledge, "comparative-form-rules");
   assert.ok(subtopic);
   const question: Question = {
     id: "irregular-good",
@@ -31,7 +31,7 @@ test("irregular 只覆盖 good 时 Coverage 不完整", () => {
     answer: "better",
     explanation: "good 不规则。",
     knowledgeId: "comparative",
-    knowledgeSubtopic: "form-change",
+    knowledgeSubtopic: "comparative-form-rules",
     patternId: "irregular",
     coverageItemId: "good",
     difficulty: 1,
@@ -40,7 +40,7 @@ test("irregular 只覆盖 good 时 Coverage 不完整", () => {
     id: "a1",
     sessionId: "s1",
     knowledgeId: "comparative",
-    subtopicId: "form-change",
+    subtopicId: "comparative-form-rules",
     patternId: "irregular",
     coverageItemId: "good",
     questionId: question.id,

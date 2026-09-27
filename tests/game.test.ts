@@ -19,7 +19,7 @@ const question: Question = {
   answer: "happier",
   explanation: "y 改成 i。",
   knowledgeId: "comparative",
-  knowledgeSubtopic: "form-change",
+  knowledgeSubtopic: "comparative-form-rules",
   patternId: "y-ending",
   coverageItemId: "happy",
   difficulty: 2,
@@ -51,7 +51,7 @@ test("Pattern 统计可按 Pattern 汇总", () => {
           id: "a1",
           sessionId: "s1",
           knowledgeId: "comparative",
-          subtopicId: "form-change",
+          subtopicId: "comparative-form-rules",
           patternId: "y-ending",
           questionId: question.id,
           answer: "happier",
@@ -61,7 +61,7 @@ test("Pattern 统计可按 Pattern 汇总", () => {
       ],
     },
     comparativeKnowledge,
-    "form-change",
+    "comparative-form-rules",
   );
   assert.equal(stats.find((item) => item.patternId === "y-ending")?.accuracy, 100);
 });

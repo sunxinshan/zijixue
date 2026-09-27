@@ -74,7 +74,7 @@ async function strategyFor(
 
 test("Mock Provider 严格按 questionDistribution 生成 Pattern 题", async () => {
   const provider = createMockLLMProvider();
-  const knowledge = scopedKnowledge("form-change");
+  const knowledge = scopedKnowledge("comparative-form-rules");
   const strategy: TeachingStrategy = {
     diagnosis: "subtopic_weakness",
     strategyLevel: 2,
@@ -96,7 +96,7 @@ test("Mock Provider 严格按 questionDistribution 生成 Pattern 题", async ()
       "comparative",
       Date.now(),
       "subtopic",
-      "form-change",
+      "comparative-form-rules",
     ),
     strategy,
     batchNumber: 1,
@@ -127,7 +127,7 @@ test("B：y-ending 薄弱时下一批增加 y-ending 占比", async () => {
     patternProgress: emptyProgress({}),
     consecutivePatternErrors: { "y-ending": 3 },
   };
-  const strategy = await strategyFor("form-change", observation);
+  const strategy = await strategyFor("comparative-form-rules", observation);
   const yCount =
     strategy.questionDistribution.find((item) => item.patternId === "y-ending")?.count ?? 0;
   const regularCount =
@@ -156,7 +156,7 @@ test("C：irregular 只覆盖 good 不能视为 Coverage 完成", async () => {
     },
     consecutivePatternErrors: {},
   };
-  const strategy = await strategyFor("form-change", observation);
+  const strategy = await strategyFor("comparative-form-rules", observation);
   assert.ok(strategy.focus.includes("irregular"));
   assert.ok(
     strategy.questionDistribution.some((item) => item.patternId === "irregular"),
@@ -182,7 +182,7 @@ test("E：9/15 → 12/15 → 14/15 识别 improving", async () => {
     patternProgress: emptyProgress({}),
     consecutivePatternErrors: { "y-ending": 1 },
   };
-  const strategy = await strategyFor("form-change", observation);
+  const strategy = await strategyFor("comparative-form-rules", observation);
   assert.equal(strategy.diagnosis, "improving");
   assert.equal(strategy.action, "increase_difficulty");
 });
@@ -200,7 +200,7 @@ test("Validator 拒绝 Pattern distribution 超出动态范围", () => {
           questionDistribution: [{ patternId: "y-ending", count: 21 }],
           reason: "测试",
         },
-        scopedKnowledge("form-change"),
+        scopedKnowledge("comparative-form-rules"),
       ),
     /总数必须在 3-20 之间/,
   );
@@ -218,7 +218,7 @@ test("选择题正确选项位置在 ABCD 中均衡随机", async () => {
     answer: "correct",
     explanation: "test",
     knowledgeId: "comparative",
-    knowledgeSubtopic: "form-change",
+    knowledgeSubtopic: "comparative-form-rules",
     patternId: "regular",
     difficulty: 1 as const,
   }));
@@ -285,7 +285,7 @@ test("Validator 将模型返回的 coverageItemId=null 规范化为 undefined", 
 
 test("高正确率且 Coverage 完成时下一批压缩为 5 题以内", async () => {
   const { boundStrategyBatchSize } = await import("@/lib/agent/coverage");
-  const knowledge = scopedKnowledge("form-change");
+  const knowledge = scopedKnowledge("comparative-form-rules");
   const patterns = knowledge.subtopics.flatMap((subtopic) => subtopic.patterns);
   const strategy: TeachingStrategy = {
     diagnosis: "improving",
@@ -336,7 +336,7 @@ test("高正确率且 Coverage 完成时下一批压缩为 5 题以内", async (
 
 test("最后批次全对且 Coverage 完成时强制 finish", async () => {
   const { forceFinishOnPerfectBatch } = await import("@/lib/agent/coverage");
-  const knowledge = scopedKnowledge("as-as");
+  const knowledge = scopedKnowledge("comparative-as-as");
   const patterns = knowledge.subtopics.flatMap((subtopic) => subtopic.patterns);
   const strategy: TeachingStrategy = {
     diagnosis: "improving",
@@ -352,6 +352,8 @@ test("最后批次全对且 Coverage 完成时强制 finish", async () => {
     currentBatch: performance(2, {
       "as-as": { correct: 5, total: 5 },
       "not-as-as": { correct: 5, total: 5 },
+      "as-as-base-form": { correct: 5, total: 5 },
+      "not-meaning": { correct: 5, total: 5 },
     }),
     pastBatches: [],
     previousStrategies: [],
@@ -377,7 +379,7 @@ test("最后批次全对且 Coverage 完成时强制 finish", async () => {
 });
 
 test("Validator 以 patternId 自动纠正 knowledgeSubtopic", () => {
-  const knowledge = scopedKnowledge("as-as");
+  const knowledge = scopedKnowledge("comparative-as-as");
   const questions = Array.from({ length: 10 }, (_, index) => ({
     id: `as-as-${index}`,
     type: "choice" as const,
@@ -395,14 +397,14 @@ test("Validator 以 patternId 自动纠正 knowledgeSubtopic", () => {
   const validated = validateQuestionBatch({ questions }, knowledge);
   assert.ok(
     validated.questions.every(
-      (question) => question.knowledgeSubtopic === "as-as",
+      (question) => question.knowledgeSubtopic === "comparative-as-as",
     ),
   );
 });
 
 test("弱 Pattern 下一批至少补齐达到目标正确数所需的题量", async () => {
   const { enforceWeakPatternMinimums } = await import("@/lib/agent/coverage");
-  const knowledge = scopedKnowledge("form-change");
+  const knowledge = scopedKnowledge("comparative-form-rules");
   const strategy: TeachingStrategy = {
     diagnosis: "subtopic_weakness",
     strategyLevel: 2,
@@ -464,7 +466,7 @@ test("questionDistribution 对象格式会规范化为数组", () => {
       },
       reason: "对象格式兼容测试",
     },
-    scopedKnowledge("as-as"),
+    scopedKnowledge("comparative-as-as"),
   );
 
   assert.deepEqual(strategy.focus, ["as-as"]);
@@ -476,7 +478,7 @@ test("questionDistribution 对象格式会规范化为数组", () => {
 });
 
 test("判断题带布尔 options 时会自动移除 options", () => {
-  const knowledge = scopedKnowledge("as-as");
+  const knowledge = scopedKnowledge("comparative-as-as");
   const validated = validateQuestionBatch(
     {
       questions: [
@@ -488,7 +490,7 @@ test("判断题带布尔 options 时会自动移除 options", () => {
           answer: true,
           explanation: "as...as 表示同级比较。",
           knowledgeId: "comparative",
-          knowledgeSubtopic: "as-as",
+          knowledgeSubtopic: "comparative-as-as",
           patternId: "as-as",
           coverageItemId: "big",
           difficulty: 1,

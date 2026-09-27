@@ -31,6 +31,57 @@ interface LegacyStorage {
   challenges?: unknown[];
 }
 
+const LEGACY_SUBTOPIC_ID_MAP: Record<string, string> = {
+  "form-change": "comparative-form-rules",
+  "as-as": "comparative-as-as",
+};
+
+function normalizeSubtopicId(subtopicId: string | undefined): string | undefined {
+  if (!subtopicId) return subtopicId;
+  return LEGACY_SUBTOPIC_ID_MAP[subtopicId] ?? subtopicId;
+}
+
+export function expandLegacyLearningState(state: LearningState): LearningState[] {
+  if (state.subtopicId !== "form-change") {
+    return [{ ...state, subtopicId: normalizeSubtopicId(state.subtopicId) }];
+  }
+
+  const knowledge = getKnowledge(state.knowledgeId);
+  const formRules = knowledge ? getSubtopic(knowledge, "comparative-form-rules") : undefined;
+  const moreMost = knowledge ? getSubtopic(knowledge, "comparative-more-most") : undefined;
+  if (!formRules || !moreMost) {
+    return [{ ...state, subtopicId: "comparative-form-rules" }];
+  }
+
+  const formPatternIds = new Set(formRules.patterns.map((pattern) => pattern.id));
+  const morePatternIds = new Set(moreMost.patterns.map((pattern) => pattern.id));
+  const formProgress = Object.fromEntries(
+    Object.entries(state.patternProgress).filter(([patternId]) =>
+      formPatternIds.has(patternId),
+    ),
+  );
+  const moreProgress = Object.fromEntries(
+    Object.entries(state.patternProgress).filter(([patternId]) =>
+      morePatternIds.has(patternId),
+    ),
+  );
+
+  return [
+    {
+      ...state,
+      subtopicId: "comparative-form-rules",
+      patternProgress: formProgress,
+      completed: false,
+    },
+    {
+      ...state,
+      subtopicId: "comparative-more-most",
+      patternProgress: moreProgress,
+      completed: false,
+    },
+  ];
+}
+
 const serverStorageSnapshot = createInitialAgentStorage();
 let cachedRawStorage: string | null | undefined;
 let cachedStorage: AppStorage | null = null;
@@ -184,22 +235,37 @@ function parseAgentStorage(raw: string | null): AppStorage {
       version: 2,
       userId: parsed.userId ?? "local-user",
       learningStates: Array.isArray(parsed.learningStates)
-        ? parsed.learningStates.map((state) => ({
-            ...state,
-            scope: state.scope ?? "knowledge",
-            patternProgress: state.patternProgress ?? {},
-            completed: state.completed ?? false,
-            strategyLevel: state.strategyLevel ?? 1,
-          }))
+        ? parsed.learningStates.flatMap((state) =>
+            expandLegacyLearningState({
+              ...state,
+              scope: state.scope ?? "knowledge",
+              patternProgress: state.patternProgress ?? {},
+              completed: state.completed ?? false,
+              strategyLevel: state.strategyLevel ?? 1,
+            }),
+          )
         : [],
       sessions: Array.isArray(parsed.sessions)
         ? parsed.sessions.map((session) => ({
             ...session,
+            subtopicId: normalizeSubtopicId(session.subtopicId),
             mode: session.mode ?? "challenge",
           }))
         : [],
-      attempts: Array.isArray(parsed.attempts) ? parsed.attempts : [],
-      questions: Array.isArray(parsed.questions) ? parsed.questions : [],
+      attempts: Array.isArray(parsed.attempts)
+        ? parsed.attempts.map((attempt) => ({
+            ...attempt,
+            subtopicId: normalizeSubtopicId(attempt.subtopicId),
+          }))
+        : [],
+      questions: Array.isArray(parsed.questions)
+        ? parsed.questions.map((question) => ({
+            ...question,
+            knowledgeSubtopic:
+              normalizeSubtopicId(question.knowledgeSubtopic) ??
+              question.knowledgeSubtopic,
+          }))
+        : [],
       legacyXp: parsed.legacyXp,
       legacyStars: parsed.legacyStars,
     };

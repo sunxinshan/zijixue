@@ -24,6 +24,25 @@ export type StrategyAction =
   | "mixed_review"
   | "finish";
 
+export interface TeachingExample {
+  sentence: string;
+  translation?: string;
+  analysis?: string;
+}
+
+export interface TeachingContent {
+  concept: string;
+  why?: string;
+  rule?: string;
+  structure?: string;
+  examples: TeachingExample[];
+  usage?: string[];
+  contrasts?: string[];
+  commonMistakes?: string[];
+  guidedExamples?: string[];
+  practiceHints?: string[];
+}
+
 export interface PatternExample {
   id: string;
   text: string;
@@ -42,7 +61,8 @@ export interface Pattern {
   required: boolean;
   minimumQuestions: number;
   coverageItems?: string[];
-  explanations: string[];
+  teachingContent: TeachingContent;
+  explanations?: string[];
   notes?: string[];
   examples: PatternExample[];
 }

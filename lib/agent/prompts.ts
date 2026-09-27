@@ -36,6 +36,8 @@ export function buildTeachingStrategyPrompt(
 - strategyLevel 3 以上必须提供 explanation 和 examples。
 - examples 必须是字符串数组，例如 ["happy → happier → happiest"]。
 - persistent_failure 必须使用 strategyLevel >= 4，并改变教学方式。
+- Pattern 中的 teachingContent 是教材事实，不得修改规则或扩展到其他 Knowledge。
+- 常规首次教学由程序展示 TeachingContent；你的策略和解释必须与其保持一致。
 - 只返回 JSON 对象，包含 diagnosis、strategyLevel、action、focus、difficulty、questionDistribution、explanation、examples、reason。
 
 当前允许使用的 Patterns：
@@ -73,6 +75,8 @@ export function buildBatchGenerationPrompt(context: BatchGenerationContext): str
 - question 题干必须使用中文说明；英文只能出现在被引用的句子、空格、或 options 中。
 - 每道题必须包含 id、type、question、options、answer、explanation、knowledgeId、knowledgeSubtopic、patternId、coverageItemId、difficulty。
 - 不要返回全英文题干。
+- 题目必须依据 Pattern.teachingContent 的规则、例句、用法和常见错误生成。
+- 不得创造 teachingContent 之外的教材规则。
 - 只返回 JSON 对象，并且仅包含 questions 数组。
 
 当前 Knowledge / Subtopic 边界：

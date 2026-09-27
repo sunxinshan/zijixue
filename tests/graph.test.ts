@@ -63,14 +63,14 @@ test("首个用户生成 QuestionPool，第二个用户直接复用", async () =
     },
   };
   const repository = createMemoryQuestionPoolRepository();
-  const knowledge = scopedKnowledge("form-change");
+  const knowledge = scopedKnowledge("comparative-form-rules");
   const subtopic = knowledge.subtopics[0];
   const learningState = createInitialLearningState(
     "local-user",
     "comparative",
     Date.now(),
     "subtopic",
-    "form-change",
+    "comparative-form-rules",
   );
 
   const firstPools = await ensureQuestionPools({
@@ -106,13 +106,13 @@ test("Subtopic 启动图只看到当前 Subtopic 的 Patterns", async () => {
       userId: "local-user",
       knowledge: comparativeKnowledge,
       mode: "subtopic",
-      subtopicId: "form-change",
+      subtopicId: "comparative-form-rules",
       learningState: createInitialLearningState(
         "local-user",
         "comparative",
         Date.now(),
         "subtopic",
-        "form-change",
+        "comparative-form-rules",
       ),
       isEmptyState: true,
     },
@@ -122,16 +122,16 @@ test("Subtopic 启动图只看到当前 Subtopic 的 Patterns", async () => {
 
   assert.ok(
     started.batch.questions.length >=
-      (getSubtopic(comparativeKnowledge, "form-change")?.minimumQuestions ?? 0),
+      (getSubtopic(comparativeKnowledge, "comparative-form-rules")?.minimumQuestions ?? 0),
   );
   assert.ok(
     started.batch.questions.every(
-      (question) => question.knowledgeSubtopic === "form-change",
+      (question) => question.knowledgeSubtopic === "comparative-form-rules",
     ),
   );
   assert.equal(
     new Set(started.batch.questions.map((question) => question.patternId)).size,
-    getSubtopic(comparativeKnowledge, "form-change")?.patterns.length,
+    getSubtopic(comparativeKnowledge, "comparative-form-rules")?.patterns.length,
   );
 });
 
