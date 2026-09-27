@@ -127,7 +127,7 @@ export function GameView({
         setStatus("question");
       } catch (error) {
         setErrorMessage(
-          error instanceof Error ? error.message : "Agent 初始化失败",
+          error instanceof Error ? error.message : "超级大脑初始化失败",
         );
         setErrorStatus(error instanceof AgentRequestError ? error.status : null);
         setStatus("error");
@@ -217,7 +217,7 @@ export function GameView({
       ]);
 
       if (response.strategy.action !== "finish") {
-        if (!response.batch) throw new Error("Agent 未返回下一批题目");
+        if (!response.batch) throw new Error("超级大脑未返回下一批题目");
         saveQuestions(response.batch.questions);
         setNextBatch(response.batch);
         setBatchNumber((current) => current + 1);
@@ -226,7 +226,7 @@ export function GameView({
       }
 
       if (!response.sessionSummary) {
-        throw new Error("Agent 未返回 SessionSummary");
+        throw new Error("超级大脑未返回 SessionSummary");
       }
 
       completeSession(
@@ -237,7 +237,7 @@ export function GameView({
       router.push(`/result/${encodeURIComponent(session.id)}`);
     } catch (error) {
       setErrorMessage(
-        error instanceof Error ? error.message : "Agent 分析失败",
+        error instanceof Error ? error.message : "超级大脑分析失败",
       );
       setStatus("error");
     }
@@ -275,7 +275,7 @@ export function GameView({
         <div className="flex min-h-[70vh] flex-col items-center justify-center rounded-[2rem] bg-white/85 p-8 text-center shadow-sm">
           <span className="animate-bounce text-4xl">🤖</span>
           <p className="mt-3 font-black text-[#315341]">
-            Agent 正在准备本批题目…
+            超级大脑正在准备本批题目…
           </p>
         </div>
       </ForestBackdrop>
@@ -347,7 +347,7 @@ export function GameView({
         <div className="mx-auto flex min-h-[70vh] max-w-xl flex-col items-center justify-center rounded-[2rem] bg-white/90 p-8 text-center shadow-sm">
           <span className="text-5xl">🍂</span>
           <h1 className="mt-4 text-2xl font-black text-[#173f2a]">
-            Agent 暂时没有准备好
+            超级大脑暂时没有准备好
           </h1>
           <p className="mt-2 text-sm font-semibold leading-6 text-[#74887b]">
             {errorMessage}
@@ -370,7 +370,7 @@ export function GameView({
         <div className="flex min-h-[70vh] flex-col items-center justify-center rounded-[2rem] bg-white/85 p-8 text-center shadow-sm">
           <span className="animate-bounce text-4xl">🌿</span>
           <p className="mt-3 font-black text-[#315341]">
-            Agent 正在分析当前批次…
+            超级大脑正在分析当前批次…
           </p>
           <p className="mt-2 text-sm font-semibold text-[#74887b]">
             程序已经完成本地判分，正在生成下一步教学建议。
@@ -400,7 +400,7 @@ export function GameView({
             第 {batchNumber - 1} 批完成
           </p>
           <h1 className="mt-2 text-2xl font-black text-[#173f2a]">
-            Agent 建议继续练习
+            超级大脑建议继续练习
           </h1>
           <p className="mt-3 text-sm font-semibold leading-6 text-[#60786a]">
             {latestStrategy?.reason}
@@ -590,7 +590,7 @@ export function GameView({
               className="mt-5 min-h-14 w-full rounded-2xl bg-[#245f3c] px-6 text-base font-black text-white shadow-lg transition hover:-translate-y-0.5"
             >
               {currentIndex === currentBatch.questions.length - 1
-                ? "完成本批并交给 Agent"
+                ? "完成本批并交给超级大脑"
                 : "下一题"}
               <span className="ml-2" aria-hidden="true">
                 →

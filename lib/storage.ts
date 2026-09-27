@@ -77,7 +77,7 @@ export function migrateLegacyStorage(raw: string): AppStorage | null {
                 strategyLevel: 1,
                 patternProgress: {},
                 completed: false,
-                summary: "由旧版固定掌握度迁移，下一次 Agent Session 会重新评估。",
+                summary: "由旧版固定掌握度迁移，下一次超级大脑 Session 会重新评估。",
                 updatedAt: Date.now(),
               },
             ]

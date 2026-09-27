@@ -89,7 +89,7 @@ export function ResultView({
             没有找到这个 Session
           </h1>
           <p className="mt-2 text-sm font-semibold text-[#74887b]">
-            学习记录可能已被清除，可以重新开始 Agent 教学。
+            学习记录可能已被清除，可以重新开始超级大脑教学。
           </p>
           <Link
             href={`/game/${knowledge.id}`}
@@ -125,7 +125,7 @@ export function ResultView({
             🦋
           </div>
           <p className="text-sm font-black tracking-wide text-white/80">
-            Agent Session 完成
+            超级大脑 Session 完成
           </p>
           <h1 className="mt-2 text-3xl font-black sm:text-4xl">
             🎉 森林探险成功！
@@ -155,7 +155,7 @@ export function ResultView({
           <div className="flex items-start justify-between gap-4">
             <div>
               <p className="text-sm font-black text-[#74887b]">
-                Agent 综合判断
+                超级大脑综合判断
               </p>
               <h2 className="mt-1 text-2xl font-black text-[#173f2a]">
                 {masteryMeta.icon} 掌握度 {summary.mastery}%
@@ -182,7 +182,7 @@ export function ResultView({
               </ul>
             ) : (
               <p className="mt-3 text-sm font-semibold text-[#74887b]">
-                Agent 还没有发现稳定的强项。
+                超级大脑还没有发现稳定的强项。
               </p>
             )}
           </div>
@@ -261,7 +261,7 @@ export function ResultView({
             </div>
           ) : (
             <p className="mt-3 rounded-2xl bg-[#effbf0] p-4 text-sm font-bold text-[#277146]">
-              Agent 记录的 Attempt 全部正确。
+              超级大脑记录的 Attempt 全部正确。
             </p>
           )}
         </section>

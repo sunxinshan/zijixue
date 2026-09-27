@@ -3,6 +3,7 @@ import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 import { analyzeBatch, createInitialObservation } from "@/lib/agent/analysis";
 import {
   applyBatchToPatternProgress,
+  boundStrategyBatchSize,
   enforceRequiredPatternCoverage,
 } from "@/lib/agent/coverage";
 import {
@@ -151,11 +152,16 @@ async function generateValidatedStrategy(
     teachingStrategyPublicSchema,
     context,
   );
+  const coverageBounded = enforceRequiredPatternCoverage(
+    generated as TeachingStrategy,
+    context.knowledge,
+    context.observation.patternProgress,
+  );
   return validateTeachingStrategy(
-    enforceRequiredPatternCoverage(
-      generated as TeachingStrategy,
+    boundStrategyBatchSize(
+      coverageBounded,
       context.knowledge,
-      context.observation.patternProgress,
+      context.observation,
     ),
     context.knowledge,
   );

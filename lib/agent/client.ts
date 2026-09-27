@@ -45,7 +45,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   const data = (await response.json()) as T & { error?: string };
   if (!response.ok) {
     throw new AgentRequestError(
-      data.error ?? "Agent 服务暂时不可用",
+      data.error ?? "超级大脑服务暂时不可用",
       response.status,
     );
   }

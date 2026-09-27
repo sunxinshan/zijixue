@@ -105,13 +105,13 @@ export function HomeDashboard() {
           </div>
           <div className="relative max-w-xl">
             <span className="inline-flex rounded-full bg-white/20 px-3 py-1 text-xs font-black tracking-wide">
-              Agent 教学
+              超级大脑教学
             </span>
             <h1 className="mt-4 text-3xl font-black tracking-tight sm:text-4xl">
               比较级大冒险
             </h1>
             <p className="mt-3 max-w-md text-sm font-semibold leading-6 text-white/85 sm:text-base">
-              Agent 会读取长期学习状态，每题量由 Agent 根据 Pattern Coverage 动态决定。
+              超级大脑会读取长期学习状态，每题量由超级大脑根据 Pattern Coverage 动态决定。
             </p>
             <div className="mt-5 flex flex-wrap items-center gap-3 text-sm font-bold">
               <span className="rounded-2xl bg-white/15 px-3 py-2">
@@ -145,7 +145,7 @@ export function HomeDashboard() {
           <div className="rounded-3xl bg-white/90 p-4 text-center shadow-sm ring-1 ring-white">
             <p className="text-2xl">{masteryMeta.icon}</p>
             <p className="mt-1 text-xl font-black text-[#205238]">{mastery}%</p>
-            <p className="text-xs font-bold text-[#74887b]">Agent 掌握度</p>
+            <p className="text-xs font-bold text-[#74887b]">超级大脑掌握度</p>
           </div>
           <div className="rounded-3xl bg-white/90 p-4 text-center shadow-sm ring-1 ring-white">
             <p className="text-2xl">⭐</p>
@@ -170,7 +170,7 @@ export function HomeDashboard() {
             <div>
               <h2 className="text-xl font-black text-[#173f2a]">我的学习</h2>
               <p className="text-sm font-semibold text-[#74887b]">
-                已完成 {view.completedSessions} 个 Agent Session
+                已完成 {view.completedSessions} 个超级大脑 Session
               </p>
             </div>
             <Link

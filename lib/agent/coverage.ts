@@ -159,3 +159,88 @@ export function enforceRequiredPatternCoverage(
       .map(([patternId, count]) => ({ patternId, count })),
   };
 }
+
+import {
+  MIN_QUESTIONS_PER_BATCH,
+} from "@/lib/game";
+import type { BatchObservation } from "@/types/agent";
+
+export function boundStrategyBatchSize(
+  strategy: TeachingStrategy,
+  knowledge: Knowledge,
+  observation: BatchObservation,
+): TeachingStrategy {
+  if (strategy.action === "finish") return strategy;
+
+  const patterns = knowledge.subtopics.flatMap((subtopic) => subtopic.patterns);
+  const coverageComplete = patterns.every(
+    (pattern) =>
+      !pattern.required ||
+      observation.patternProgress[pattern.id]?.coverageComplete === true,
+  );
+  const accuracy = observation.currentBatch.accuracy;
+  const targetTotal =
+    accuracy >= 90 && coverageComplete
+      ? 5
+      : accuracy >= 80
+        ? 8
+        : strategy.diagnosis === "persistent_failure" ||
+            strategy.diagnosis === "rule_misunderstanding"
+          ? 5
+          : MAX_QUESTIONS_PER_BATCH;
+
+  const counts = new Map(
+    strategy.questionDistribution.map((item) => [item.patternId, item.count]),
+  );
+  const protectedIds = new Set([
+    ...strategy.focus,
+    ...patterns
+      .filter(
+        (pattern) =>
+          pattern.required &&
+          !observation.patternProgress[pattern.id]?.coverageComplete,
+      )
+      .map((pattern) => pattern.id),
+  ]);
+
+  let total = Array.from(counts.values()).reduce((sum, count) => sum + count, 0);
+  while (total > targetTotal) {
+    const candidates = patterns
+      .filter((pattern) => (counts.get(pattern.id) ?? 0) > 0)
+      .sort((left, right) => {
+        const leftProtected = protectedIds.has(left.id) ? 1 : 0;
+        const rightProtected = protectedIds.has(right.id) ? 1 : 0;
+        if (leftProtected !== rightProtected) return leftProtected - rightProtected;
+        const leftCount = counts.get(left.id) ?? 0;
+        const rightCount = counts.get(right.id) ?? 0;
+        if (leftCount !== rightCount) return rightCount - leftCount;
+        return left.id.localeCompare(right.id);
+      });
+
+    const candidate = candidates.find(
+      (pattern) =>
+        (counts.get(pattern.id) ?? 0) > 1 ||
+        !protectedIds.has(pattern.id),
+    );
+    if (!candidate) break;
+    counts.set(candidate.id, (counts.get(candidate.id) ?? 0) - 1);
+    total -= 1;
+  }
+
+  while (total < MIN_QUESTIONS_PER_BATCH) {
+    const patternId =
+      strategy.focus[0] ??
+      patterns.find((pattern) => !observation.patternProgress[pattern.id]?.coverageComplete)?.id ??
+      patterns[0]?.id;
+    if (!patternId) break;
+    counts.set(patternId, (counts.get(patternId) ?? 0) + 1);
+    total += 1;
+  }
+
+  return {
+    ...strategy,
+    questionDistribution: Array.from(counts.entries())
+      .filter(([, count]) => count > 0)
+      .map(([patternId, count]) => ({ patternId, count })),
+  };
+}

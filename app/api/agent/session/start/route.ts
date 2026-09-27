@@ -131,7 +131,7 @@ export async function POST(request: Request) {
     }
     console.error("start session failed", error);
     return Response.json(
-      { error: "Agent 生成题目失败，请稍后重试。" },
+      { error: "超级大脑生成题目失败，请稍后重试。" },
       { status: 502 },
     );
   }

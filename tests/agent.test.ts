@@ -282,3 +282,54 @@ test("Validator 将模型返回的 coverageItemId=null 规范化为 undefined", 
     ),
   );
 });
+
+test("高正确率且 Coverage 完成时下一批压缩为 5 题以内", async () => {
+  const { boundStrategyBatchSize } = await import("@/lib/agent/coverage");
+  const knowledge = scopedKnowledge("form-change");
+  const patterns = knowledge.subtopics.flatMap((subtopic) => subtopic.patterns);
+  const strategy: TeachingStrategy = {
+    diagnosis: "improving",
+    strategyLevel: 2,
+    action: "mixed_review",
+    focus: ["more-most", "irregular", "e-ending"],
+    difficulty: 2,
+    questionDistribution: patterns.map((pattern) => ({
+      patternId: pattern.id,
+      count: 4,
+    })),
+    reason: "20/20 后混合复习。",
+  };
+  const observation: BatchObservation = {
+    batchNumber: 5,
+    currentBatch: performance(5, {
+      "more-most": { correct: 4, total: 4 },
+      irregular: { correct: 4, total: 4 },
+      "e-ending": { correct: 4, total: 4 },
+      regular: { correct: 4, total: 4 },
+      "y-ending": { correct: 4, total: 4 },
+      "double-consonant": { correct: 4, total: 4 },
+    }),
+    pastBatches: [],
+    previousStrategies: [],
+    patternProgress: Object.fromEntries(
+      patterns.map((pattern) => [
+        pattern.id,
+        {
+          patternId: pattern.id,
+          attemptedQuestions: 4,
+          correctQuestions: 4,
+          coveredItems: pattern.coverageItems ?? [],
+          coverageComplete: true,
+        },
+      ]),
+    ),
+    consecutivePatternErrors: {},
+  };
+  const bounded = boundStrategyBatchSize(strategy, knowledge, observation);
+  const total = bounded.questionDistribution.reduce(
+    (sum, item) => sum + item.count,
+    0,
+  );
+  assert.ok(total <= 5);
+  assert.ok(total >= 3);
+});
