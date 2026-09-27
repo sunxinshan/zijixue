@@ -278,3 +278,69 @@ export function forceFinishOnPerfectBatch(
     reason: "当前批次全部答对，且所有 required Pattern 均已覆盖，直接通过。",
   };
 }
+
+function subtopicTargetAccuracy(
+  knowledge: Knowledge,
+  patternId: string,
+): number {
+  return (
+    knowledge.subtopics.find((subtopic) =>
+      subtopic.patterns.some((pattern) => pattern.id === patternId),
+    )?.targetAccuracy ?? 90
+  );
+}
+
+export function enforceWeakPatternMinimums(
+  strategy: TeachingStrategy,
+  knowledge: Knowledge,
+  observation: BatchObservation,
+): TeachingStrategy {
+  if (strategy.action === "finish") return strategy;
+
+  const patterns = knowledge.subtopics.flatMap((subtopic) => subtopic.patterns);
+  const progress =
+    observation.previousPatternProgress ?? observation.patternProgress;
+  const counts = new Map(
+    strategy.questionDistribution.map((item) => [item.patternId, item.count]),
+  );
+
+  for (const pattern of patterns) {
+    const current = progress[pattern.id];
+    if (!current || current.attemptedQuestions === 0) continue;
+
+    const targetAccuracy = subtopicTargetAccuracy(knowledge, pattern.id);
+    const targetCorrect = Math.ceil(
+      current.attemptedQuestions * (targetAccuracy / 100),
+    );
+    const needed = Math.max(0, targetCorrect - current.correctQuestions);
+    if (needed > 0 && (counts.get(pattern.id) ?? 0) < needed) {
+      counts.set(pattern.id, needed);
+    }
+  }
+
+  let total = Array.from(counts.values()).reduce((sum, count) => sum + count, 0);
+  const protectedMinimums = new Map(counts);
+
+  while (total > MAX_QUESTIONS_PER_BATCH) {
+    const candidate = patterns
+      .filter(
+        (pattern) =>
+          (counts.get(pattern.id) ?? 0) >
+          (protectedMinimums.get(pattern.id) ?? 0),
+      )
+      .sort(
+        (left, right) =>
+          (counts.get(right.id) ?? 0) - (counts.get(left.id) ?? 0),
+      )[0];
+    if (!candidate) break;
+    counts.set(candidate.id, (counts.get(candidate.id) ?? 1) - 1);
+    total -= 1;
+  }
+
+  return {
+    ...strategy,
+    questionDistribution: Array.from(counts.entries())
+      .filter(([, count]) => count > 0)
+      .map(([patternId, count]) => ({ patternId, count })),
+  };
+}

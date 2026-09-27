@@ -5,6 +5,7 @@ import {
   applyBatchToPatternProgress,
   boundStrategyBatchSize,
   enforceRequiredPatternCoverage,
+  enforceWeakPatternMinimums,
   forceFinishOnPerfectBatch,
 } from "@/lib/agent/coverage";
 import {
@@ -167,9 +168,14 @@ async function generateValidatedStrategy(
     context.knowledge,
     context.observation.patternProgress,
   );
+  const bounded = boundStrategyBatchSize(
+    coverageBounded,
+    context.knowledge,
+    context.observation,
+  );
   return validateTeachingStrategy(
-    boundStrategyBatchSize(
-      coverageBounded,
+    enforceWeakPatternMinimums(
+      bounded,
       context.knowledge,
       context.observation,
     ),
@@ -363,6 +369,7 @@ function createCompletionGraph(provider: LLMProvider) {
         currentBatch: state.currentBatch,
         pastBatches: state.pastBatches,
         previousStrategies: state.strategies,
+        previousPatternProgress: state.learningState.patternProgress,
         patternProgress,
       }),
     };

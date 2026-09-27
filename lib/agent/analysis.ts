@@ -75,6 +75,7 @@ export function analyzeBatch(input: {
   currentBatch: QuestionBatch;
   pastBatches: BatchPerformance[];
   previousStrategies: TeachingStrategy[];
+  previousPatternProgress?: Record<string, PatternProgress>;
   patternProgress: Record<string, PatternProgress>;
 }): BatchObservation {
   return {
@@ -86,6 +87,7 @@ export function analyzeBatch(input: {
     ),
     pastBatches: input.pastBatches,
     previousStrategies: input.previousStrategies,
+    previousPatternProgress: input.previousPatternProgress,
     patternProgress: input.patternProgress,
     consecutivePatternErrors: calculateConsecutiveErrors(
       input.attempts,
@@ -108,6 +110,7 @@ export function createInitialObservation(
     },
     pastBatches: [],
     previousStrategies: [],
+    previousPatternProgress: patternProgress,
     patternProgress,
     consecutivePatternErrors: {},
   };

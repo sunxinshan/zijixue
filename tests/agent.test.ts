@@ -399,3 +399,53 @@ test("Validator 以 patternId 自动纠正 knowledgeSubtopic", () => {
     ),
   );
 });
+
+test("弱 Pattern 下一批至少补齐达到目标正确数所需的题量", async () => {
+  const { enforceWeakPatternMinimums } = await import("@/lib/agent/coverage");
+  const knowledge = scopedKnowledge("form-change");
+  const strategy: TeachingStrategy = {
+    diagnosis: "subtopic_weakness",
+    strategyLevel: 2,
+    action: "targeted_practice",
+    focus: ["y-ending"],
+    difficulty: 2,
+    questionDistribution: [
+      { patternId: "y-ending", count: 1 },
+      { patternId: "regular", count: 2 },
+    ],
+    reason: "继续练习。",
+  };
+  const observation: BatchObservation = {
+    batchNumber: 1,
+    currentBatch: performance(1, {
+      "y-ending": { correct: 7, total: 10 },
+    }),
+    pastBatches: [],
+    previousStrategies: [],
+    previousPatternProgress: {
+      "y-ending": {
+        patternId: "y-ending",
+        attemptedQuestions: 10,
+        correctQuestions: 7,
+        coveredItems: ["busy", "easy", "happy"],
+        coverageComplete: true,
+      },
+    },
+    patternProgress: {
+      "y-ending": {
+        patternId: "y-ending",
+        attemptedQuestions: 10,
+        correctQuestions: 7,
+        coveredItems: ["busy", "easy", "happy"],
+        coverageComplete: true,
+      },
+    },
+    consecutivePatternErrors: {},
+  };
+
+  const enforced = enforceWeakPatternMinimums(strategy, knowledge, observation);
+  assert.ok(
+    (enforced.questionDistribution.find((item) => item.patternId === "y-ending")
+      ?.count ?? 0) >= 2,
+  );
+});

@@ -154,6 +154,7 @@ export interface BatchObservation {
   currentBatch: BatchPerformance;
   pastBatches: BatchPerformance[];
   previousStrategies: TeachingStrategy[];
+  previousPatternProgress?: Record<string, PatternProgress>;
   patternProgress: Record<string, PatternProgress>;
   consecutivePatternErrors: Record<string, number>;
 }
