@@ -53,12 +53,29 @@ export function ResultView({
       .map((questionId) => questionById.get(questionId))
       .filter((question) => Boolean(question));
 
+    const recommendedSubtopics =
+      session.mode === "challenge"
+        ? Array.from(
+            new Map(
+              session.sessionSummary.recommendedFocus
+                .map((patternId) =>
+                  knowledge.subtopics.find((subtopic) =>
+                    subtopic.patterns.some((pattern) => pattern.id === patternId),
+                  ),
+                )
+                .filter((subtopic) => Boolean(subtopic))
+                .map((subtopic) => [subtopic!.id, subtopic!]),
+            ).values(),
+          )
+        : [];
+
     return {
       session,
       attempts,
       stats,
       subtopicStats: getSubtopicStats(storage, knowledge),
       wrongQuestions,
+      recommendedSubtopics,
       xp: getSessionXp(storage, sessionId),
     };
   }, [knowledge, sessionId, storage]);
@@ -91,7 +108,9 @@ export function ResultView({
   const focusTitles = summary.recommendedFocus
     .map(
       (id) =>
-        knowledge.subtopics.find((subtopic) => subtopic.id === id)?.title,
+        knowledge.subtopics
+          .flatMap((subtopic) => subtopic.patterns)
+          .find((pattern) => pattern.id === id)?.name,
     )
     .filter((title): title is string => Boolean(title));
 
@@ -197,6 +216,23 @@ export function ResultView({
             ))}
           </div>
         </section>
+
+        {view.session.mode === "challenge" && view.recommendedSubtopics.length > 0 ? (
+          <section className="mt-5 rounded-[2rem] bg-white/92 p-5 shadow-sm ring-1 ring-white sm:p-6">
+            <h2 className="text-xl font-black text-[#173f2a]">建议先复习 Subtopic</h2>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2">
+              {view.recommendedSubtopics.map((subtopic) => (
+                <Link
+                  key={subtopic.id}
+                  href={`/game/${knowledge.id}/${subtopic.id}`}
+                  className="rounded-2xl bg-[#fff5d4] p-4 font-black text-[#8a5a00] ring-1 ring-[#f2dc92]"
+                >
+                  {subtopic.name} →
+                </Link>
+              ))}
+            </div>
+          </section>
+        ) : null}
 
         <section className="mt-5 rounded-[2rem] bg-white/92 p-5 shadow-sm ring-1 ring-white sm:p-6">
           <h2 className="text-xl font-black text-[#173f2a]">

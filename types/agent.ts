@@ -2,6 +2,8 @@ export type QuestionType = "choice" | "true-false";
 export type Difficulty = 1 | 2 | 3 | 4 | 5;
 export type StrategyLevel = 1 | 2 | 3 | 4 | 5;
 export type SessionStatus = "active" | "completed";
+export type LearningScope = "subtopic" | "knowledge";
+export type SessionMode = "subtopic" | "challenge";
 
 export type Diagnosis =
   | "accidental"
@@ -22,33 +24,42 @@ export type StrategyAction =
   | "mixed_review"
   | "finish";
 
-export interface KnowledgeExample {
+export interface PatternExample {
   id: string;
-  base: string;
-  comparative: string;
-  superlative: string;
+  text: string;
+  base?: string;
+  comparative?: string;
+  superlative?: string;
+  coverageItemId?: string;
 }
 
-export interface KnowledgeSubtopic {
+export interface Pattern {
   id: string;
-  title: string;
-  description: string;
-}
-
-export interface KnowledgeRule {
-  id: string;
+  knowledgeId: string;
   subtopicId: string;
-  title: string;
-  explanation: string;
-  examples: KnowledgeExample[];
+  name: string;
+  description: string;
+  required: boolean;
+  minimumQuestions: number;
+  coverageItems?: string[];
+  examples: PatternExample[];
+}
+
+export interface Subtopic {
+  id: string;
+  knowledgeId: string;
+  name: string;
+  description: string;
+  minimumQuestions: number;
+  targetAccuracy: number;
+  patterns: Pattern[];
 }
 
 export interface Knowledge {
   id: string;
   title: string;
   description: string;
-  subtopics: KnowledgeSubtopic[];
-  rules: KnowledgeRule[];
+  subtopics: Subtopic[];
 }
 
 export interface Question {
@@ -60,6 +71,8 @@ export interface Question {
   explanation: string;
   knowledgeId: string;
   knowledgeSubtopic: string;
+  patternId: string;
+  coverageItemId?: string;
   difficulty: Difficulty;
 }
 
@@ -71,14 +84,25 @@ export interface Attempt {
   id: string;
   sessionId: string;
   knowledgeId: string;
+  subtopicId?: string;
+  patternId?: string;
+  coverageItemId?: string;
   questionId: string;
   answer: string | boolean;
   correct: boolean;
   timestamp: number;
 }
 
+export interface PatternProgress {
+  patternId: string;
+  attemptedQuestions: number;
+  correctQuestions: number;
+  coveredItems: string[];
+  coverageComplete: boolean;
+}
+
 export interface QuestionDistributionItem {
-  subtopic: string;
+  patternId: string;
   count: number;
 }
 
@@ -94,8 +118,8 @@ export interface TeachingStrategy {
   reason: string;
 }
 
-export interface SubtopicPerformance {
-  subtopic: string;
+export interface PatternPerformance {
+  patternId: string;
   correct: number;
   total: number;
   accuracy: number;
@@ -106,7 +130,7 @@ export interface BatchPerformance {
   total: number;
   correct: number;
   accuracy: number;
-  subtopicStats: SubtopicPerformance[];
+  patternStats: PatternPerformance[];
 }
 
 export interface BatchObservation {
@@ -114,7 +138,8 @@ export interface BatchObservation {
   currentBatch: BatchPerformance;
   pastBatches: BatchPerformance[];
   previousStrategies: TeachingStrategy[];
-  consecutiveSubtopicErrors: Record<string, number>;
+  patternProgress: Record<string, PatternProgress>;
+  consecutivePatternErrors: Record<string, number>;
 }
 
 export interface SessionSummary {
@@ -128,12 +153,16 @@ export interface SessionSummary {
 export interface LearningState {
   userId: string;
   knowledgeId: string;
+  scope: LearningScope;
+  subtopicId?: string;
   mastery: number;
   strengths: string[];
   weaknesses: string[];
   currentDifficulty: Difficulty;
   recommendedFocus: string[];
   strategyLevel: StrategyLevel;
+  patternProgress: Record<string, PatternProgress>;
+  completed: boolean;
   summary: string;
   updatedAt: number;
 }
@@ -142,6 +171,8 @@ export interface LearningSession {
   id: string;
   userId: string;
   knowledgeId: string;
+  mode: SessionMode;
+  subtopicId?: string;
   startedAt: number;
   endedAt?: number;
   status: SessionStatus;
@@ -152,6 +183,8 @@ export interface SessionState {
   sessionId: string;
   userId: string;
   knowledgeId: string;
+  mode: SessionMode;
+  subtopicId?: string;
   learningState: LearningState;
   attempts: Attempt[];
   currentBatch?: QuestionBatch;
@@ -171,12 +204,6 @@ export interface AppStorage {
   questions: Question[];
   legacyXp?: number;
   legacyStars?: number;
-}
-
-export interface LearningAnalysisContext {
-  task: "analyze_learning_state";
-  knowledge: Knowledge;
-  learningState: LearningState;
 }
 
 export interface StrategyGenerationContext {

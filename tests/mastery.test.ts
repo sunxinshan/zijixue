@@ -1,60 +1,64 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { comparativeKnowledge } from "@/data/knowledge/comparative";
-import {
-  buildLearningStateFromSummary,
-  createInitialLearningState,
-  getMasteryMeta,
-} from "@/lib/mastery";
+import { comparativeKnowledge, getSubtopic } from "@/data/knowledge/comparative";
+import { applyBatchToPatternProgress } from "@/lib/agent/coverage";
+import { createInitialLearningState, getMasteryMeta } from "@/lib/mastery";
+import type { Attempt, Question } from "@/types/agent";
 
-test("LearningState 初值包含 strategyLevel，不使用固定逐题加减公式", () => {
-  const state = createInitialLearningState("local-user", "comparative", 1);
-  assert.equal(state.mastery, 0);
-  assert.equal(state.currentDifficulty, 1);
-  assert.equal(state.strategyLevel, 1);
-  assert.deepEqual(state.strengths, []);
-});
-
-test("Agent SessionSummary 和最终 TeachingStrategy 更新 LearningState", () => {
-  const current = createInitialLearningState("local-user", "comparative", 1);
-  const next = buildLearningStateFromSummary(
-    current,
-    comparativeKnowledge,
-    {
-      mastery: 78,
-      strengths: ["一般情况"],
-      weaknesses: ["y 结尾变化"],
-      recommendedFocus: ["y-ending"],
-      summary: "基本规则稳定，y 结尾仍需练习。",
-    },
-    [
-      {
-        diagnosis: "persistent_failure",
-        strategyLevel: 4,
-        action: "change_strategy",
-        focus: ["y-ending"],
-        difficulty: 3,
-        questionDistribution: [
-          { subtopic: "y-ending", count: 6 },
-          { subtopic: "regular", count: 4 },
-        ],
-        explanation: "重新解释 y 结尾变化。",
-        examples: ["happy → happier → happiest"],
-        reason: "连续多个 batch 失败。",
-      },
-    ],
-    10,
+test("Subtopic LearningState 初始化包含 Pattern Progress", () => {
+  const state = createInitialLearningState(
+    "local-user",
+    "comparative",
+    1,
+    "subtopic",
+    "form-change",
   );
-
-  assert.equal(next.mastery, 78);
-  assert.equal(next.currentDifficulty, 3);
-  assert.equal(next.strategyLevel, 4);
-  assert.deepEqual(next.recommendedFocus, ["y-ending"]);
-  assert.equal(next.updatedAt, 10);
+  assert.equal(state.scope, "subtopic");
+  assert.equal(state.subtopicId, "form-change");
+  assert.equal(state.completed, false);
+  assert.deepEqual(state.patternProgress, {});
 });
 
-test("掌握度文字等级保留原有游戏化展示", () => {
+test("irregular 只覆盖 good 时 Coverage 不完整", () => {
+  const subtopic = getSubtopic(comparativeKnowledge, "form-change");
+  assert.ok(subtopic);
+  const question: Question = {
+    id: "irregular-good",
+    type: "choice",
+    question: "good 的比较级是？",
+    options: ["better", "gooder"],
+    answer: "better",
+    explanation: "good 不规则。",
+    knowledgeId: "comparative",
+    knowledgeSubtopic: "form-change",
+    patternId: "irregular",
+    coverageItemId: "good",
+    difficulty: 1,
+  };
+  const attempt: Attempt = {
+    id: "a1",
+    sessionId: "s1",
+    knowledgeId: "comparative",
+    subtopicId: "form-change",
+    patternId: "irregular",
+    coverageItemId: "good",
+    questionId: question.id,
+    answer: "better",
+    correct: true,
+    timestamp: 1,
+  };
+
+  const progress = applyBatchToPatternProgress(
+    subtopic.patterns,
+    [question],
+    [attempt],
+  );
+  assert.equal(progress.irregular.coverageComplete, false);
+  assert.deepEqual(progress.irregular.coveredItems, ["good"]);
+});
+
+test("掌握度文字等级保留游戏化展示", () => {
   assert.equal(getMasteryMeta(10).label, "初学");
   assert.equal(getMasteryMeta(90).icon, "🌲");
 });

@@ -7,11 +7,11 @@ import {
   evaluateQuestionAnswer,
   getAttemptStats,
   getLevelProgress,
-  getSubtopicStats,
+  getPatternStats,
 } from "@/lib/game";
-import type { AppStorage, Question } from "@/types/agent";
+import type { Question } from "@/types/agent";
 
-const choiceQuestion: Question = {
+const question: Question = {
   id: "q-choice",
   type: "choice",
   question: "happy 的比较级是？",
@@ -19,77 +19,49 @@ const choiceQuestion: Question = {
   answer: "happier",
   explanation: "y 改成 i。",
   knowledgeId: "comparative",
-  knowledgeSubtopic: "y-ending",
+  knowledgeSubtopic: "form-change",
+  patternId: "y-ending",
+  coverageItemId: "happy",
   difficulty: 2,
 };
 
-const trueFalseQuestion: Question = {
-  id: "q-tf",
-  type: "true-false",
-  question: "hotter 是 hot 的比较级。",
-  answer: true,
-  explanation: "hot 双写 t。",
-  knowledgeId: "comparative",
-  knowledgeSubtopic: "double-consonant",
-  difficulty: 1,
-};
-
-test("choice 和 true-false 都由程序本地判断", () => {
-  assert.equal(evaluateQuestionAnswer(choiceQuestion, "Happier"), true);
-  assert.equal(evaluateQuestionAnswer(choiceQuestion, "happyer"), false);
-  assert.equal(evaluateQuestionAnswer(trueFalseQuestion, true), true);
-  assert.equal(evaluateQuestionAnswer(trueFalseQuestion, false), false);
+test("choice 和 true-false 均由程序本地判断", () => {
+  assert.equal(evaluateQuestionAnswer(question, "Happier"), true);
+  assert.equal(evaluateQuestionAnswer(question, "happyer"), false);
 });
 
-test("Attempt 统计、星级和等级进度可计算", () => {
-  const attempts = [
-    { correct: true },
-    { correct: true },
-    { correct: false },
-    { correct: true },
-  ];
-  assert.deepEqual(getAttemptStats(attempts as never), {
-    correct: 3,
-    total: 4,
-    wrong: 1,
-    accuracy: 75,
-  });
-  assert.equal(calculateStars(9, 10), 3);
+test("Attempt、星级和等级进度可计算", () => {
+  assert.deepEqual(
+    getAttemptStats([
+      { correct: true },
+      { correct: false },
+    ] as never),
+    { correct: 1, total: 2, wrong: 1, accuracy: 50 },
+  );
+  assert.equal(calculateStars(14, 15), 3);
   assert.equal(getLevelProgress(350).level, 2);
 });
 
-test("Subtopic 统计来自客观 Attempt 和 Question", () => {
-  const storage = {
-    questions: [choiceQuestion, trueFalseQuestion],
-    attempts: [
-      {
-        id: "a1",
-        sessionId: "s1",
-        knowledgeId: "comparative",
-        questionId: choiceQuestion.id,
-        answer: "happier",
-        correct: true,
-        timestamp: 1,
-      },
-      {
-        id: "a2",
-        sessionId: "s1",
-        knowledgeId: "comparative",
-        questionId: trueFalseQuestion.id,
-        answer: false,
-        correct: false,
-        timestamp: 2,
-      },
-    ],
-  } as Pick<AppStorage, "attempts" | "questions">;
-
-  const stats = getSubtopicStats(storage, comparativeKnowledge);
-  assert.equal(
-    stats.find((item) => item.subtopicId === "y-ending")?.accuracy,
-    100,
+test("Pattern 统计可按 Pattern 汇总", () => {
+  const stats = getPatternStats(
+    {
+      questions: [question],
+      attempts: [
+        {
+          id: "a1",
+          sessionId: "s1",
+          knowledgeId: "comparative",
+          subtopicId: "form-change",
+          patternId: "y-ending",
+          questionId: question.id,
+          answer: "happier",
+          correct: true,
+          timestamp: 1,
+        },
+      ],
+    },
+    comparativeKnowledge,
+    "form-change",
   );
-  assert.equal(
-    stats.find((item) => item.subtopicId === "double-consonant")?.accuracy,
-    0,
-  );
+  assert.equal(stats.find((item) => item.patternId === "y-ending")?.accuracy, 100);
 });

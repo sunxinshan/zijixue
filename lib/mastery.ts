@@ -1,7 +1,13 @@
+import { applyBatchToPatternProgress } from "@/lib/agent/coverage";
 import type {
+  Attempt,
   Knowledge,
+  LearningScope,
   LearningState,
+  PatternProgress,
+  Question,
   SessionSummary,
+  Subtopic,
   TeachingStrategy,
 } from "@/types/agent";
 
@@ -33,16 +39,22 @@ export function createInitialLearningState(
   userId: string,
   knowledgeId: string,
   updatedAt = Date.now(),
+  scope: LearningScope = "knowledge",
+  subtopicId?: string,
 ): LearningState {
   return {
     userId,
     knowledgeId,
+    scope,
+    subtopicId,
     mastery: 0,
     strengths: [],
     weaknesses: [],
     currentDifficulty: 1,
     recommendedFocus: [],
     strategyLevel: 1,
+    patternProgress: {},
+    completed: false,
     summary: "还没有完成过一次学习 Session。",
     updatedAt,
   };
@@ -52,18 +64,61 @@ function unique(values: string[]): string[] {
   return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)));
 }
 
-export function buildLearningStateFromSummary(
-  current: LearningState,
-  knowledge: Knowledge,
-  summary: SessionSummary,
-  strategies: TeachingStrategy[],
-  updatedAt = Date.now(),
-): LearningState {
-  const validSubtopicIds = new Set(knowledge.subtopics.map((subtopic) => subtopic.id));
+export function buildLearningStateFromSummary(input: {
+  current: LearningState;
+  knowledge: Knowledge;
+  subtopic?: Subtopic;
+  summary: SessionSummary;
+  strategies: TeachingStrategy[];
+  attempts: Attempt[];
+  questions: Question[];
+  updatedAt?: number;
+}): LearningState {
+  const {
+    current,
+    knowledge,
+    subtopic,
+    summary,
+    strategies,
+    attempts,
+    questions,
+  } = input;
+  const validPatternIds = new Set(
+    knowledge.subtopics.flatMap((item) =>
+      item.patterns.map((pattern) => pattern.id),
+    ),
+  );
   const recommendedFocus = summary.recommendedFocus.filter((id) =>
-    validSubtopicIds.has(id),
+    validPatternIds.has(id),
   );
   const latestStrategy = strategies.at(-1);
+  const patternProgress = subtopic
+    ? applyBatchToPatternProgress(
+        subtopic.patterns,
+        questions,
+        attempts,
+        current.patternProgress,
+      )
+    : current.patternProgress;
+  const totalAttempted = Object.values(patternProgress).reduce(
+    (sum, progress) => sum + progress.attemptedQuestions,
+    0,
+  );
+  const coverageComplete = subtopic
+    ? subtopic.patterns.every(
+        (pattern) =>
+          !pattern.required || patternProgress[pattern.id]?.coverageComplete,
+      )
+    : false;
+  const completed =
+    current.scope === "knowledge"
+      ? latestStrategy?.action === "finish"
+      : Boolean(
+          subtopic &&
+            coverageComplete &&
+            totalAttempted >= subtopic.minimumQuestions &&
+            latestStrategy?.action === "finish",
+        );
 
   return {
     ...current,
@@ -74,7 +129,16 @@ export function buildLearningStateFromSummary(
       latestStrategy?.difficulty ?? current.currentDifficulty,
     recommendedFocus,
     strategyLevel: latestStrategy?.strategyLevel ?? current.strategyLevel,
+    patternProgress,
+    completed,
     summary: summary.summary.trim(),
-    updatedAt,
+    updatedAt: input.updatedAt ?? Date.now(),
   };
+}
+
+export function mergePatternProgress(
+  target: Record<string, PatternProgress>,
+  source: Record<string, PatternProgress>,
+): Record<string, PatternProgress> {
+  return { ...target, ...source };
 }

@@ -2,16 +2,19 @@ import { z } from "zod";
 
 import { QUESTIONS_PER_BATCH } from "@/lib/game";
 import type {
+  Attempt,
   BatchObservation,
   BatchPerformance,
   Difficulty,
   Knowledge,
+  LearningState,
+  Pattern,
+  PatternProgress,
   Question,
   QuestionBatch,
   QuestionDistributionItem,
   SessionSummary,
   StrategyLevel,
-  SubtopicPerformance,
   TeachingStrategy,
 } from "@/types/agent";
 
@@ -23,10 +26,19 @@ const scoreLevelSchema = z.union([
   z.literal(5),
 ]);
 
-export const questionDistributionItemSchema = z.object({
-  subtopic: z.string().min(1),
-  count: z.number().int().min(0).max(QUESTIONS_PER_BATCH),
+export const patternProgressSchema: z.ZodType<PatternProgress> = z.object({
+  patternId: z.string().min(1),
+  attemptedQuestions: z.number().int().min(0),
+  correctQuestions: z.number().int().min(0),
+  coveredItems: z.array(z.string()),
+  coverageComplete: z.boolean(),
 });
+
+export const questionDistributionItemSchema: z.ZodType<QuestionDistributionItem> =
+  z.object({
+    patternId: z.string().min(1),
+    count: z.number().int().min(0).max(QUESTIONS_PER_BATCH),
+  });
 
 export const teachingStrategySchema = z.object({
   diagnosis: z.enum([
@@ -86,8 +98,8 @@ export const teachingStrategyPublicSchema: z.ZodType<TeachingStrategy> = z.objec
   reason: z.string().min(1),
 });
 
-export const subtopicPerformanceSchema: z.ZodType<SubtopicPerformance> = z.object({
-  subtopic: z.string().min(1),
+export const patternPerformanceSchema = z.object({
+  patternId: z.string().min(1),
   correct: z.number().int().min(0),
   total: z.number().int().min(0),
   accuracy: z.number().min(0).max(100),
@@ -98,7 +110,7 @@ export const batchPerformanceSchema: z.ZodType<BatchPerformance> = z.object({
   total: z.number().int().min(0),
   correct: z.number().int().min(0),
   accuracy: z.number().min(0).max(100),
-  subtopicStats: z.array(subtopicPerformanceSchema),
+  patternStats: z.array(patternPerformanceSchema),
 });
 
 export const batchObservationSchema: z.ZodType<BatchObservation> = z.object({
@@ -106,7 +118,8 @@ export const batchObservationSchema: z.ZodType<BatchObservation> = z.object({
   currentBatch: batchPerformanceSchema,
   pastBatches: z.array(batchPerformanceSchema),
   previousStrategies: z.array(teachingStrategyPublicSchema),
-  consecutiveSubtopicErrors: z.record(z.string(), z.number().int().min(0)),
+  patternProgress: z.record(z.string(), patternProgressSchema),
+  consecutivePatternErrors: z.record(z.string(), z.number().int().min(0)),
 });
 
 export const llmQuestionSchema = z.object({
@@ -118,6 +131,8 @@ export const llmQuestionSchema = z.object({
   explanation: z.string().min(1),
   knowledgeId: z.string().min(1),
   knowledgeSubtopic: z.string().min(1),
+  patternId: z.string().min(1),
+  coverageItemId: z.string().optional(),
   difficulty: scoreLevelSchema,
 });
 
@@ -133,23 +148,30 @@ export const sessionSummarySchema = z.object({
   summary: z.string().min(1),
 });
 
-export const learningStateSchema = z.object({
+export const learningStateSchema: z.ZodType<LearningState> = z.object({
   userId: z.string().min(1),
   knowledgeId: z.string().min(1),
+  scope: z.enum(["subtopic", "knowledge"]),
+  subtopicId: z.string().optional(),
   mastery: z.number().min(0).max(100),
   strengths: z.array(z.string()),
   weaknesses: z.array(z.string()),
   currentDifficulty: scoreLevelSchema,
   recommendedFocus: z.array(z.string()),
   strategyLevel: scoreLevelSchema,
+  patternProgress: z.record(z.string(), patternProgressSchema),
+  completed: z.boolean(),
   summary: z.string(),
   updatedAt: z.number(),
 });
 
-export const attemptSchema = z.object({
+export const attemptSchema: z.ZodType<Attempt> = z.object({
   id: z.string().min(1),
   sessionId: z.string().min(1),
   knowledgeId: z.string().min(1),
+  subtopicId: z.string().optional(),
+  patternId: z.string().optional(),
+  coverageItemId: z.string().optional(),
   questionId: z.string().min(1),
   answer: z.union([z.string(), z.boolean()]),
   correct: z.boolean(),
@@ -165,13 +187,14 @@ export const questionSchema: z.ZodType<Question> = z.object({
   explanation: z.string().min(1),
   knowledgeId: z.string().min(1),
   knowledgeSubtopic: z.string().min(1),
+  patternId: z.string().min(1),
+  coverageItemId: z.string().optional(),
   difficulty: scoreLevelSchema,
 });
 
 export const questionBatchPublicSchema: z.ZodType<QuestionBatch> = z.object({
   questions: z.array(questionSchema),
 });
-
 
 export const sessionSummaryPublicSchema: z.ZodType<SessionSummary> = z.object({
   mastery: z.number().min(0).max(100),
@@ -181,8 +204,19 @@ export const sessionSummaryPublicSchema: z.ZodType<SessionSummary> = z.object({
   summary: z.string().min(1),
 });
 
+export class AgentValidationError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "AgentValidationError";
+  }
+}
+
 function normalizeQuestionText(value: string): string {
   return value.toLowerCase().replace(/\s+/g, " ").replace(/[?.!,，。！？]/g, "").trim();
+}
+
+function getPatterns(knowledge: Knowledge): Pattern[] {
+  return knowledge.subtopics.flatMap((subtopic) => subtopic.patterns);
 }
 
 function normalizeStrategyExamples(value: unknown[] | undefined): string[] | undefined {
@@ -205,13 +239,6 @@ function normalizeStrategyExamples(value: unknown[] | undefined): string[] | und
     .filter(Boolean);
 }
 
-export class AgentValidationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "AgentValidationError";
-  }
-}
-
 export function validateTeachingStrategy(
   value: unknown,
   knowledge: Knowledge,
@@ -221,35 +248,33 @@ export function validateTeachingStrategy(
     throw new AgentValidationError(`TeachingStrategy 无效：${parsed.error.message}`);
   }
 
-  const validSubtopicIds = new Set(knowledge.subtopics.map((subtopic) => subtopic.id));
+  const patterns = getPatterns(knowledge);
+  const validPatternIds = new Set(patterns.map((pattern) => pattern.id));
   const focus = Array.from(new Set(parsed.data.focus));
-  const invalidFocus = focus.find((id) => !validSubtopicIds.has(id));
+  const invalidFocus = focus.find((id) => !validPatternIds.has(id));
   if (invalidFocus) {
     throw new AgentValidationError(`TeachingStrategy focus 越界：${invalidFocus}`);
   }
 
   const distribution = parsed.data.questionDistribution;
-  const seenDistribution = new Set<string>();
+  const seen = new Set<string>();
   for (const item of distribution) {
-    if (!validSubtopicIds.has(item.subtopic)) {
-      throw new AgentValidationError(`questionDistribution subtopic 越界：${item.subtopic}`);
+    if (!validPatternIds.has(item.patternId)) {
+      throw new AgentValidationError(`questionDistribution patternId 越界：${item.patternId}`);
     }
-    if (seenDistribution.has(item.subtopic)) {
-      throw new AgentValidationError(`questionDistribution subtopic 重复：${item.subtopic}`);
+    if (seen.has(item.patternId)) {
+      throw new AgentValidationError(`questionDistribution patternId 重复：${item.patternId}`);
     }
-    seenDistribution.add(item.subtopic);
+    seen.add(item.patternId);
   }
 
-  const distributionTotal = distribution.reduce((sum, item) => sum + item.count, 0);
-  if (
-    parsed.data.action !== "finish" &&
-    distributionTotal !== QUESTIONS_PER_BATCH
-  ) {
+  const total = distribution.reduce((sum, item) => sum + item.count, 0);
+  if (parsed.data.action !== "finish" && total !== QUESTIONS_PER_BATCH) {
     throw new AgentValidationError(
-      `questionDistribution 总数必须为 ${QUESTIONS_PER_BATCH}，实际为 ${distributionTotal}`,
+      `questionDistribution 总数必须为 ${QUESTIONS_PER_BATCH}，实际为 ${total}`,
     );
   }
-  if (parsed.data.action === "finish" && distributionTotal !== 0) {
+  if (parsed.data.action === "finish" && total !== 0) {
     throw new AgentValidationError("finish 策略不应包含下一批题目分布");
   }
 
@@ -257,7 +282,6 @@ export function validateTeachingStrategy(
     parsed.data.action !== "finish" &&
     (parsed.data.strategyLevel >= 3 ||
       ["explain", "simplify", "change_strategy"].includes(parsed.data.action));
-
   if (
     requiresExplanation &&
     (!parsed.data.explanation || !parsed.data.examples?.length)
@@ -283,7 +307,7 @@ export function validateTeachingStrategy(
     action: parsed.data.action,
     focus,
     difficulty: parsed.data.difficulty as Difficulty,
-    questionDistribution: distribution as QuestionDistributionItem[],
+    questionDistribution: distribution,
     explanation: parsed.data.explanation,
     examples: normalizeStrategyExamples(parsed.data.examples),
     reason: parsed.data.reason,
@@ -300,14 +324,15 @@ export function validateQuestionBatch(
     throw new AgentValidationError(`题目结构无效：${parsed.error.message}`);
   }
 
-  const questions = parsed.data.questions as Question[];
+  const questions = parsed.data.questions;
   if (questions.length !== QUESTIONS_PER_BATCH) {
     throw new AgentValidationError(
       `题目数量必须为 ${QUESTIONS_PER_BATCH}，实际为 ${questions.length}`,
     );
   }
 
-  const subtopicIds = new Set(knowledge.subtopics.map((subtopic) => subtopic.id));
+  const patterns = getPatterns(knowledge);
+  const patternById = new Map(patterns.map((pattern) => [pattern.id, pattern]));
   const ids = new Set<string>();
   const texts = new Set<string>();
   const actualDistribution = new Map<string, number>();
@@ -327,12 +352,29 @@ export function validateQuestionBatch(
     if (question.knowledgeId !== knowledge.id) {
       throw new AgentValidationError(`题目越界：${question.knowledgeId}`);
     }
-    if (!subtopicIds.has(question.knowledgeSubtopic)) {
-      throw new AgentValidationError(`未知 subtopic：${question.knowledgeSubtopic}`);
+
+    const pattern = patternById.get(question.patternId);
+    if (!pattern) {
+      throw new AgentValidationError(`未知 patternId：${question.patternId}`);
     }
+    if (question.knowledgeSubtopic !== pattern.subtopicId) {
+      throw new AgentValidationError(
+        `题目 subtopic 与 Pattern 不匹配：${question.patternId}`,
+      );
+    }
+    if (
+      pattern.coverageItems?.length &&
+      (!question.coverageItemId ||
+        !pattern.coverageItems.includes(question.coverageItemId))
+    ) {
+      throw new AgentValidationError(
+        `Pattern ${pattern.id} 的 coverageItemId 无效：${question.coverageItemId ?? "missing"}`,
+      );
+    }
+
     actualDistribution.set(
-      question.knowledgeSubtopic,
-      (actualDistribution.get(question.knowledgeSubtopic) ?? 0) + 1,
+      question.patternId,
+      (actualDistribution.get(question.patternId) ?? 0) + 1,
     );
 
     if (question.type === "choice") {
@@ -354,10 +396,10 @@ export function validateQuestionBatch(
 
   if (distribution) {
     for (const item of distribution) {
-      const actual = actualDistribution.get(item.subtopic) ?? 0;
+      const actual = actualDistribution.get(item.patternId) ?? 0;
       if (actual !== item.count) {
         throw new AgentValidationError(
-          `题目分布不符：${item.subtopic} 期望 ${item.count}，实际 ${actual}`,
+          `题目分布不符：${item.patternId} 期望 ${item.count}，实际 ${actual}`,
         );
       }
     }
@@ -375,9 +417,9 @@ export function validateSessionSummary(
     throw new AgentValidationError(`SessionSummary 无效：${parsed.error.message}`);
   }
 
-  const validSubtopicIds = new Set(knowledge.subtopics.map((subtopic) => subtopic.id));
+  const validPatternIds = new Set(getPatterns(knowledge).map((pattern) => pattern.id));
   const recommendedFocus = Array.from(new Set(parsed.data.recommendedFocus));
-  const invalidFocus = recommendedFocus.find((id) => !validSubtopicIds.has(id));
+  const invalidFocus = recommendedFocus.find((id) => !validPatternIds.has(id));
   if (invalidFocus) {
     throw new AgentValidationError(`recommendedFocus 越界：${invalidFocus}`);
   }

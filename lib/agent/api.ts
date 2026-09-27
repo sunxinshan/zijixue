@@ -1,7 +1,6 @@
 import { z } from "zod";
 
 import { QUESTIONS_PER_BATCH } from "@/lib/game";
-
 import {
   attemptSchema,
   batchPerformanceSchema,
@@ -13,12 +12,17 @@ import {
 export const startSessionRequestSchema = z.object({
   userId: z.string().min(1),
   knowledgeId: z.string().min(1),
+  mode: z.enum(["subtopic", "challenge"]),
+  subtopicId: z.string().optional(),
   learningState: learningStateSchema.nullable().optional(),
+  subtopicStates: z.array(learningStateSchema).optional(),
 });
 
 export const completeBatchRequestSchema = z.object({
   userId: z.string().min(1),
   knowledgeId: z.string().min(1),
+  mode: z.enum(["subtopic", "challenge"]),
+  subtopicId: z.string().optional(),
   learningState: learningStateSchema,
   sessionId: z.string().min(1),
   attempts: z.array(attemptSchema).length(QUESTIONS_PER_BATCH),

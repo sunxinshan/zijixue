@@ -5,6 +5,7 @@ import type {
   LearningSession,
   LearningState,
   QuestionBatch,
+  SessionMode,
   SessionSummary,
   TeachingStrategy,
 } from "@/types/agent";
@@ -31,7 +32,6 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-
   const data = (await response.json()) as T & { error?: string };
   if (!response.ok) {
     throw new Error(data.error ?? "Agent 服务暂时不可用");
@@ -42,18 +42,26 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
 export function startAgentSession(input: {
   userId: string;
   knowledge: Knowledge;
+  mode: SessionMode;
+  subtopicId?: string;
   learningState?: LearningState;
+  subtopicStates?: LearningState[];
 }) {
   return postJson<StartSessionResponse>("/api/agent/session/start", {
     userId: input.userId,
     knowledgeId: input.knowledge.id,
+    mode: input.mode,
+    subtopicId: input.subtopicId,
     learningState: input.learningState,
+    subtopicStates: input.subtopicStates,
   });
 }
 
 export function completeAgentBatch(input: {
   userId: string;
   knowledge: Knowledge;
+  mode: SessionMode;
+  subtopicId?: string;
   learningState: LearningState;
   sessionId: string;
   attempts: Attempt[];
@@ -68,6 +76,8 @@ export function completeAgentBatch(input: {
     {
       userId: input.userId,
       knowledgeId: input.knowledge.id,
+      mode: input.mode,
+      subtopicId: input.subtopicId,
       learningState: input.learningState,
       sessionId: input.sessionId,
       attempts: input.attempts,

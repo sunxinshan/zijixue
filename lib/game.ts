@@ -116,7 +116,7 @@ export function getSubtopicStats(
     const correct = attempts.filter((attempt) => attempt.correct).length;
     return {
       subtopicId: subtopic.id,
-      title: subtopic.title,
+      title: subtopic.name,
       correct,
       total: attempts.length,
       accuracy:
@@ -127,4 +127,42 @@ export function getSubtopicStats(
 
 export function difficultyLabel(difficulty: Difficulty): string {
   return ["", "起步", "基础", "进阶", "挑战", "精通"][difficulty];
+}
+
+
+export interface PatternStats {
+  patternId: string;
+  name: string;
+  subtopicId: string;
+  correct: number;
+  total: number;
+  accuracy: number;
+}
+
+export function getPatternStats(
+  storage: Pick<AppStorage, "attempts" | "questions">,
+  knowledge: Knowledge,
+  subtopicId?: string,
+): PatternStats[] {
+  const questionById = new Map(
+    storage.questions.map((question) => [question.id, question]),
+  );
+  const patterns = knowledge.subtopics
+    .filter((subtopic) => !subtopicId || subtopic.id === subtopicId)
+    .flatMap((subtopic) => subtopic.patterns.map((pattern) => ({ pattern, subtopicId: subtopic.id })));
+
+  return patterns.map(({ pattern, subtopicId: patternSubtopicId }) => {
+    const attempts = storage.attempts.filter(
+      (attempt) => questionById.get(attempt.questionId)?.patternId === pattern.id,
+    );
+    const correct = attempts.filter((attempt) => attempt.correct).length;
+    return {
+      patternId: pattern.id,
+      name: pattern.name,
+      subtopicId: patternSubtopicId,
+      correct,
+      total: attempts.length,
+      accuracy: attempts.length > 0 ? Math.round((correct / attempts.length) * 100) : 0,
+    };
+  });
 }

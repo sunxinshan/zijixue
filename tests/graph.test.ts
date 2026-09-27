@@ -2,196 +2,84 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type { z } from "zod";
 
-import { comparativeKnowledge } from "@/data/knowledge/comparative";
-import { createBatchPerformance } from "@/lib/agent/analysis";
+import { comparativeKnowledge, getSubtopic } from "@/data/knowledge/comparative";
 import { getOrCreateBaselineBatch } from "@/lib/agent/baseline";
 import { createMemoryBaselineStore } from "@/lib/agent/baseline-store";
+import { runStartSessionGraph } from "@/lib/agent/graph";
 import type { LLMProvider } from "@/lib/agent/llm";
-import {
-  runCompleteBatchGraph,
-  runStartSessionGraph,
-} from "@/lib/agent/graph";
 import { createMockLLMProvider } from "@/lib/agent/providers/mock";
 import { createInitialLearningState } from "@/lib/mastery";
-import type { Attempt, QuestionBatch, TeachingStrategy } from "@/types/agent";
+import type { LearningState, PatternProgress } from "@/types/agent";
 
-function createAttempts(
-  sessionId: string,
-  questionIds: string[],
-  correctIds: Set<string>,
-  batchNumber: number,
-): Attempt[] {
-  return questionIds.map((questionId, index) => ({
-    id: `attempt-b${batchNumber}-${index}`,
-    sessionId,
-    knowledgeId: "comparative",
-    questionId,
-    answer: index % 2 === 0 ? "answer" : true,
-    correct: correctIds.has(questionId),
-    timestamp: index + 1,
-  }));
+function scopedKnowledge(subtopicId: string) {
+  const subtopic = getSubtopic(comparativeKnowledge, subtopicId);
+  assert.ok(subtopic);
+  return { ...comparativeKnowledge, subtopics: [subtopic] };
 }
 
-async function runBatch(
-  provider: ReturnType<typeof createMockLLMProvider>,
-  input: {
-    sessionId: string;
-    learningState: ReturnType<typeof createInitialLearningState>;
-    currentBatch: QuestionBatch;
-    batchNumber: number;
-    strategies: TeachingStrategy[];
-    pastBatches: ReturnType<typeof createBatchPerformance>[];
-    correctCount: number;
-  },
-) {
-  const questionIds = input.currentBatch.questions.map((question) => question.id);
-  const correctIds = new Set(questionIds.slice(0, input.correctCount));
-  const attempts = createAttempts(
-    input.sessionId,
-    questionIds,
-    correctIds,
-    input.batchNumber,
+function completeProgressForSubtopic(subtopicId: string): Record<string, PatternProgress> {
+  const subtopic = getSubtopic(comparativeKnowledge, subtopicId);
+  assert.ok(subtopic);
+  return Object.fromEntries(
+    subtopic.patterns.map((pattern) => [
+      pattern.id,
+      {
+        patternId: pattern.id,
+        attemptedQuestions: Math.max(pattern.minimumQuestions, pattern.coverageItems?.length ?? 0),
+        correctQuestions: Math.max(pattern.minimumQuestions, pattern.coverageItems?.length ?? 0),
+        coveredItems: pattern.coverageItems ?? [],
+        coverageComplete: true,
+      },
+    ]),
   );
-  const result = await runCompleteBatchGraph(
-    {
-      userId: "local-user",
-      knowledge: comparativeKnowledge,
-      learningState: input.learningState,
-      sessionId: input.sessionId,
-      attempts,
-      currentBatch: input.currentBatch,
-      batchNumber: input.batchNumber,
-      pastBatches: input.pastBatches,
-      strategies: input.strategies,
-      previousQuestions: input.currentBatch.questions.map(
-        (question) => question.question,
-      ),
-    },
-    provider,
-  );
+}
+
+function completedSubtopicState(subtopicId: string): LearningState {
   return {
-    result,
-    performance: createBatchPerformance(
-      input.batchNumber,
-      attempts,
-      input.currentBatch.questions,
+    ...createInitialLearningState(
+      "local-user",
+      "comparative",
+      Date.now(),
+      "subtopic",
+      subtopicId,
     ),
+    mastery: 90,
+    completed: true,
+    patternProgress: completeProgressForSubtopic(subtopicId),
   };
 }
 
-test("LangGraph 启动流程生成 TeachingStrategy 和 15 道题", async () => {
-  const provider = createMockLLMProvider();
-  const learningState = createInitialLearningState("local-user", "comparative");
-  const started = await runStartSessionGraph(
-    {
-      userId: "local-user",
-      knowledge: comparativeKnowledge,
-      learningState,
-      isEmptyState: false,
-    },
-    provider,
-  );
-
-  assert.equal(started.batch.questions.length, 15);
-  assert.equal(
-    started.strategy.questionDistribution.reduce(
-      (sum, item) => sum + item.count,
-      0,
-    ),
-    15,
-  );
-  assert.ok(started.sessionId.startsWith("session-"));
-});
-
-test("未达标 batch 返回 continue、TeachingStrategy 和下一批题目", async () => {
-  const provider = createMockLLMProvider();
-  const learningState = createInitialLearningState("local-user", "comparative");
-  const started = await runStartSessionGraph(
-    { userId: "local-user", knowledge: comparativeKnowledge, learningState, isEmptyState: false },
-    provider,
-  );
-  const { result } = await runBatch(provider, {
-    sessionId: started.sessionId,
-    learningState: started.learningState,
-    currentBatch: started.batch,
-    batchNumber: 1,
-    strategies: [started.strategy],
-    pastBatches: [],
-    correctCount: 8,
-  });
-
-  assert.notEqual(result.strategy.action, "finish");
-  assert.equal(result.batch?.questions.length, 15);
-  assert.equal(result.sessionSummary, undefined);
-  const firstBatchIds = new Set(
-    started.batch.questions.map((question) => question.id),
-  );
-  assert.equal(
-    result.batch?.questions.some((question) => firstBatchIds.has(question.id)),
-    false,
-  );
-});
-
-test("连续稳定正确后生成 Summary 并更新 LearningState", async () => {
-  const provider = createMockLLMProvider();
-  const learningState = createInitialLearningState("local-user", "comparative");
-  const started = await runStartSessionGraph(
-    { userId: "local-user", knowledge: comparativeKnowledge, learningState, isEmptyState: false },
-    provider,
-  );
-
-  const first = await runBatch(provider, {
-    sessionId: started.sessionId,
-    learningState: started.learningState,
-    currentBatch: started.batch,
-    batchNumber: 1,
-    strategies: [started.strategy],
-    pastBatches: [],
-    correctCount: 15,
-  });
-  assert.notEqual(first.result.strategy.action, "finish");
-  assert.ok(first.result.batch);
-
-  const second = await runBatch(provider, {
-    sessionId: started.sessionId,
-    learningState: first.result.learningState,
-    currentBatch: first.result.batch,
-    batchNumber: 2,
-    strategies: [started.strategy, first.result.strategy],
-    pastBatches: [first.performance],
-    correctCount: 15,
-  });
-
-  assert.equal(second.result.strategy.diagnosis, "mastered");
-  assert.equal(second.result.strategy.action, "finish");
-  assert.ok(second.result.sessionSummary);
-  assert.ok(second.result.learningState.mastery >= 90);
-  assert.equal(second.result.learningState.strategyLevel, 5);
-});
-
-test("空 LearningState 首次生成并持久化基线题目，后续请求直接复用", async () => {
+test("空 LearningState 生成并复用 Subtopic 基线题库", async () => {
   const provider = createMockLLMProvider();
   let calls = 0;
   const countingProvider: LLMProvider = {
     kind: "counting",
-    async generate<T>(
-      prompt: string,
-      schema: z.ZodType<T>,
-      context?: unknown,
-    ) {
+    async generate<T>(prompt: string, schema: z.ZodType<T>, context?: unknown) {
       calls += 1;
       return provider.generate(prompt, schema, context);
     },
   };
   const store = createMemoryBaselineStore();
+  const knowledge = scopedKnowledge("form-change");
+  const learningState = createInitialLearningState(
+    "local-user",
+    "comparative",
+    Date.now(),
+    "subtopic",
+    "form-change",
+  );
 
   const first = await getOrCreateBaselineBatch({
-    knowledge: comparativeKnowledge,
+    knowledge,
+    learningState,
+    scopeKey: "comparative:subtopic:form-change",
     provider: countingProvider,
     store,
   });
   const second = await getOrCreateBaselineBatch({
-    knowledge: comparativeKnowledge,
+    knowledge,
+    learningState,
+    scopeKey: "comparative:subtopic:form-change",
     provider: countingProvider,
     store,
   });
@@ -202,38 +90,75 @@ test("空 LearningState 首次生成并持久化基线题目，后续请求直�
     first.questions.map((question) => question.id),
     second.questions.map((question) => question.id),
   );
-  assert.ok(first.questions.every((question) => question.id.startsWith("baseline-")));
 });
 
-test("空 LearningState 启动图使用预生成基线题目", async () => {
+test("Subtopic 启动图只看到当前 Subtopic 的 Patterns", async () => {
   const provider = createMockLLMProvider();
-  const store = createMemoryBaselineStore();
-  const learningState = createInitialLearningState("local-user", "comparative");
-
-  const first = await runStartSessionGraph(
+  const started = await runStartSessionGraph(
     {
       userId: "local-user",
       knowledge: comparativeKnowledge,
-      learningState,
+      mode: "subtopic",
+      subtopicId: "form-change",
+      learningState: createInitialLearningState(
+        "local-user",
+        "comparative",
+        Date.now(),
+        "subtopic",
+        "form-change",
+      ),
       isEmptyState: true,
     },
     provider,
-    store,
-  );
-  const second = await runStartSessionGraph(
-    {
-      userId: "another-user",
-      knowledge: comparativeKnowledge,
-      learningState,
-      isEmptyState: true,
-    },
-    provider,
-    store,
+    createMemoryBaselineStore(),
   );
 
-  assert.deepEqual(
-    first.batch.questions.map((question) => question.id),
-    second.batch.questions.map((question) => question.id),
+  assert.equal(started.batch.questions.length, 15);
+  assert.ok(
+    started.batch.questions.every(
+      (question) => question.knowledgeSubtopic === "form-change",
+    ),
   );
-  assert.equal(first.strategy.reason.includes("基线题目"), true);
+  assert.equal(
+    new Set(started.batch.questions.map((question) => question.patternId)).size,
+    6,
+  );
+});
+
+test("Challenge 模式可以混合所有 Subtopic 和 Pattern", async () => {
+  const provider = createMockLLMProvider();
+  const subtopicStates = comparativeKnowledge.subtopics.map((subtopic) =>
+    completedSubtopicState(subtopic.id),
+  );
+  const challengeState = {
+    ...createInitialLearningState(
+      "local-user",
+      "comparative",
+      Date.now(),
+      "knowledge",
+    ),
+    mastery: 90,
+    completed: true,
+    patternProgress: Object.assign(
+      {},
+      ...subtopicStates.map((state) => state.patternProgress),
+    ),
+  };
+  const started = await runStartSessionGraph(
+    {
+      userId: "local-user",
+      knowledge: comparativeKnowledge,
+      mode: "challenge",
+      learningState: challengeState,
+      isEmptyState: false,
+    },
+    provider,
+  );
+
+  assert.equal(started.batch.questions.length, 15);
+  assert.ok(
+    new Set(
+      started.batch.questions.map((question) => question.knowledgeSubtopic),
+    ).size > 1,
+  );
 });

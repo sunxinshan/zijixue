@@ -1,15 +1,20 @@
-import { createFileBaselineStore, type BaselineQuestionStore } from "@/lib/agent/baseline-store";
+import {
+  createFileBaselineStore,
+  type BaselineQuestionStore,
+} from "@/lib/agent/baseline-store";
 import type { LLMProvider } from "@/lib/agent/llm";
-import { QUESTIONS_PER_BATCH } from "@/lib/game";
 import { buildBatchGenerationPrompt } from "@/lib/agent/prompts";
 import { randomizeChoiceOptionPositions } from "@/lib/agent/question-options";
 import {
   questionBatchPublicSchema,
   validateQuestionBatch,
 } from "@/lib/agent/validation";
+import { QUESTIONS_PER_BATCH } from "@/lib/game";
 import type {
   BatchGenerationContext,
   Knowledge,
+  LearningState,
+  Pattern,
   QuestionBatch,
   QuestionDistributionItem,
   TeachingStrategy,
@@ -18,11 +23,16 @@ import type {
 const defaultStore = createFileBaselineStore();
 const pending = new Map<string, Promise<QuestionBatch>>();
 
+function allPatterns(knowledge: Knowledge): Pattern[] {
+  return knowledge.subtopics.flatMap((subtopic) => subtopic.patterns);
+}
+
 export function createBalancedDistribution(
   knowledge: Knowledge,
 ): QuestionDistributionItem[] {
-  const distribution = knowledge.subtopics.map((subtopic) => ({
-    subtopic: subtopic.id,
+  const patterns = allPatterns(knowledge);
+  const distribution = patterns.map((pattern) => ({
+    patternId: pattern.id,
     count: 0,
   }));
 
@@ -40,23 +50,19 @@ function buildBaselineGenerationStrategy(
     diagnosis: "accidental",
     strategyLevel: 1,
     action: "continue",
-    focus: knowledge.subtopics.map((subtopic) => subtopic.id),
+    focus: allPatterns(knowledge).map((pattern) => pattern.id),
     difficulty: 1,
     questionDistribution: createBalancedDistribution(knowledge),
-    reason: "首次初始化 Knowledge，生成并缓存基础题目。",
+    reason: "首次初始化当前学习范围，生成并缓存基础题目。",
   };
 }
 
 function buildBaselineTeachingStrategy(
-  knowledge: Knowledge,
   batch: QuestionBatch,
 ): TeachingStrategy {
   const counts = new Map<string, number>();
   for (const question of batch.questions) {
-    counts.set(
-      question.knowledgeSubtopic,
-      (counts.get(question.knowledgeSubtopic) ?? 0) + 1,
-    );
+    counts.set(question.patternId, (counts.get(question.patternId) ?? 0) + 1);
   }
 
   return {
@@ -66,7 +72,7 @@ function buildBaselineTeachingStrategy(
     focus: Array.from(counts.keys()),
     difficulty: 1,
     questionDistribution: Array.from(counts.entries()).map(
-      ([subtopic, count]) => ({ subtopic, count }),
+      ([patternId, count]) => ({ patternId, count }),
     ),
     reason: "LearningState 为空，使用服务器端预生成的基线题目。",
   };
@@ -74,36 +80,28 @@ function buildBaselineTeachingStrategy(
 
 function assignBaselineIds(
   batch: QuestionBatch,
-  knowledgeId: string,
+  scopeKey: string,
 ): QuestionBatch {
+  const safeKey = scopeKey.replace(/[^a-zA-Z0-9_-]/g, "-");
   return {
     questions: batch.questions.map((question, index) => ({
       ...question,
-      id: `baseline-${knowledgeId}-q${index + 1}`,
+      id: `baseline-${safeKey}-q${index + 1}`,
     })),
   };
 }
 
 async function generateBaselineBatch(
   knowledge: Knowledge,
+  learningState: LearningState,
   provider: LLMProvider,
+  scopeKey: string,
 ): Promise<QuestionBatch> {
   const generationStrategy = buildBaselineGenerationStrategy(knowledge);
   const context: BatchGenerationContext = {
     task: "generate_question_batch",
     knowledge,
-    learningState: {
-      userId: "baseline",
-      knowledgeId: knowledge.id,
-      mastery: 0,
-      strengths: [],
-      weaknesses: [],
-      currentDifficulty: 1,
-      recommendedFocus: [],
-      strategyLevel: 1,
-      summary: "首次初始化 Knowledge。",
-      updatedAt: Date.now(),
-    },
+    learningState,
     strategy: generationStrategy,
     batchNumber: 1,
     previousQuestions: [],
@@ -119,7 +117,7 @@ async function generateBaselineBatch(
       knowledge,
       generationStrategy.questionDistribution,
     ),
-    knowledge.id,
+    scopeKey,
   );
 }
 
@@ -137,23 +135,30 @@ function validateStoredBaseline(
 
 export async function getOrCreateBaselineBatch(input: {
   knowledge: Knowledge;
+  learningState: LearningState;
+  scopeKey: string;
   provider: LLMProvider;
   store?: BaselineQuestionStore;
 }): Promise<QuestionBatch> {
   const store = input.store ?? defaultStore;
   const existing = validateStoredBaseline(
-    await store.get(input.knowledge.id),
+    await store.get(input.scopeKey),
     input.knowledge,
   );
   if (existing) return randomizeChoiceOptionPositions(existing);
 
-  const pendingKey = input.knowledge.id;
+  const pendingKey = input.scopeKey;
   const current = pending.get(pendingKey);
   if (current) return current;
 
-  const task = generateBaselineBatch(input.knowledge, input.provider)
+  const task = generateBaselineBatch(
+    input.knowledge,
+    input.learningState,
+    input.provider,
+    input.scopeKey,
+  )
     .then(async (batch) => {
-      await store.save(input.knowledge.id, batch);
+      await store.save(input.scopeKey, batch);
       return randomizeChoiceOptionPositions(batch);
     })
     .finally(() => {
@@ -165,8 +170,7 @@ export async function getOrCreateBaselineBatch(input: {
 }
 
 export function createBaselineStrategy(
-  knowledge: Knowledge,
   batch: QuestionBatch,
 ): TeachingStrategy {
-  return buildBaselineTeachingStrategy(knowledge, batch);
+  return buildBaselineTeachingStrategy(batch);
 }

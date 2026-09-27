@@ -6,119 +6,105 @@
 >
 > 完成任务后必须更新本文档。
 
-## 1. 当前项目目标
-
-英语森林是一款面向小学生的游戏化英语学习网站。
-
-核心模式：
+## 1. 当前内容模型
 
 ```text
-孩子答题
- ↓
-程序记录客观事实
- ↓
-Agent 诊断学习状态
- ↓
-选择教学策略
- ↓
-生成下一批题
- ↓
-再次评估
+Knowledge
+  ↓
+Subtopic
+  ↓
+Pattern
+  ↓
+Question
 ```
 
-## 2. 当前技术栈
+- Knowledge 是完整场景/知识主题。
+- Subtopic 是用户看到的学习关卡。
+- Pattern 是 Agent 调度的最小教学单元。
+- Coverage 与 Mastery 分离。
 
-MVP：
+## 2. Comparative Knowledge
 
 ```text
-Next.js 16
-React 19
-TypeScript
-Tailwind CSS 4
-LangGraph
-LangChain Core / OpenAI
-Zod
-LocalStorage
-DeepSeek deepseek-v4-flash
+comparative
+比较级与比较表达
+
+├── comparative-basic 普通比较级
+├── superlative-basic 最高级
+├── form-change 比较级/最高级词形变化
+└── as-as 同级比较
 ```
 
-## 3. 项目文档
+`form-change` 包含：
 
-```text
-docs/
-├── PRD.md
-├── DESIGN.md
-├── TECH.md
-├── CONTENT.md
-├── AGENT.md
-├── AGENT_v1.md
-├── DATA.md
-├── STATUS.md
-├── CODEX-PROMPT.md
-├── CODEX-PROMPT-v1.md
-└── AGENT_v1.md
-```
+- regular
+- e-ending
+- y-ending
+- double-consonant
+- more-most
+- irregular
 
-## 4. 当前架构
+`irregular` 支持逐词 Coverage：
 
-- `Comparative` 是唯一 Knowledge / Level。
-- `regular`、`e-ending`、`y-ending`、`double-consonant`、`irregular` 是 subtopic。
-- 每次进入 Game 页面会创建新的 LearningSession。
-- Session 使用新的 Agent Context，只读取当前 Knowledge 的 LearningState。
-- 固定 Question Selector 已移除。
-- 固定 mastery 加减公式已移除。
+- good
+- well
+- bad
+- little
+- many
+- much
 
-## 5. TeachingStrategy v1
-
-已实现七类诊断：
-
-- accidental
-- subtopic_weakness
-- rule_misunderstanding
-- multiple_weaknesses
-- persistent_failure
-- improving
-- mastered
-
-已实现五级教学策略：
-
-1. 正常练习
-2. 针对性练习
-3. 解释 + 示例 + 简单练习
-4. 改变教学方式
-5. 综合验证 / 结束
-
-TeachingStrategy 包含：
+## 3. PatternProgress
 
 ```ts
-{
-  diagnosis,
-  strategyLevel,
-  action,
-  focus,
-  difficulty,
-  questionDistribution,
-  explanation?,
-  examples?,
-  reason
+interface PatternProgress {
+  patternId: string;
+  attemptedQuestions: number;
+  correctQuestions: number;
+  coveredItems: string[];
+  coverageComplete: boolean;
 }
 ```
 
-`questionDistribution` 总数必须为 10，且每个 subtopic 必须属于当前 Knowledge。
+Coverage Complete 只表示测过，不表示掌握。
 
-## 6. persistent_failure
+## 4. LearningState
 
-同一 subtopic 连续多个 batch 低准确率时：
+LearningState 区分：
 
-- diagnosis 升级为 `persistent_failure`
-- strategyLevel 至少为 4
-- action 必须为 `simplify`、`change_strategy` 或 `explain`
-- 必须提供 explanation 和 examples
-- 可以减少干扰项、降低难度、更换题型、使用正反例和拆分问题
+- Subtopic LearningState
+- Knowledge Challenge LearningState
 
-## 7. LangGraph 流程
+Subtopic LearningState 包含：
 
-启动：
+- scope
+- subtopicId
+- mastery
+- strengths
+- weaknesses
+- currentDifficulty
+- recommendedFocus
+- strategyLevel
+- patternProgress
+- completed
+- summary
+- updatedAt
+
+## 5. Agent Context
+
+Subtopic 学习时，只向 Agent 注入当前 Subtopic 的：
+
+- Patterns
+- PatternProgress
+- LearningState
+- Attempts 统计
+
+不会注入其他 Subtopic 的详细状态。
+
+Challenge 时才读取整个 Knowledge 的所有 Subtopic 和 Pattern 状态。
+
+## 6. LangGraph
+
+Subtopic 启动：
 
 ```text
 START
@@ -129,100 +115,55 @@ START
 → END
 ```
 
-每批完成：
+Batch 完成：
 
 ```text
 START
 → record_attempt
-→ analyze_batch（程序客观统计）
-→ generate_teaching_strategy（Agent 诊断）
-→ finish ? summarize_session → save_learning_state → END
-         : generate_question_batch → END
+→ analyze_batch
+→ generate_teaching_strategy
+→ continue ? generate_question_batch
+           : summarize_session → save_learning_state
+→ END
 ```
 
-程序负责答案判定和 Attempt 事实记录。Agent 负责诊断、策略和题目生成。
+## 7. Question Batch
 
-## 8. Question 和 Validation
+- 每批 15 道题。
+- 只支持 choice / true-false。
+- Batch 不等于 Subtopic。
+- Agent 根据 Pattern Coverage 和历史表现决定 Pattern 分布。
+- required Pattern 未完成 Coverage 时优先。
+- y-ending、irregular、more-most 可增加题量。
+- 选择题正确选项位置由程序在 A/B/C/D 中均衡随机。
 
-每批正好 15 道题，只支持：
+## 8. Baseline Question Cache
 
-- choice
-- true-false
+当 Subtopic LearningState 为空时：
 
-Validator 校验：
-
-- 15 道题
-- 类型合法
-- choice 的 options 和 answer 合法
-- true-false answer 为 boolean
-- knowledgeId 正确
-- subtopic 合法
-- questionDistribution 每个 subtopic 范围合法
-- questionDistribution 总数必须为 10，finish 时必须为空
-- 实际题目分布必须与 TeachingStrategy 一致
-- difficulty 为 1 到 5
-- 题目 ID 和题干不重复
-- 选择题正确选项位置由程序均衡随机化
-- strategyLevel 3 以上必须提供 explanation 和 examples
-- persistent_failure 必须升级 strategyLevel 并改变教学方式
-
-
-## 8.1 Baseline Question Cache
-
-当 `analyze_learning_state` 的 LearningState 为空时：
-
-- 首次请求由模型生成 15 道基线题。
-- 题目通过 Validator 后保存到服务器端。
-- 后续同 Knowledge 的空状态请求直接复用。
-- 非空状态仍进入 TeachingStrategy 动态出题流程。
-- 默认存储目录：`.data/baselines/{knowledgeId}.json`
+- 首次由模型生成 15 道基线题。
+- 程序验证后保存到服务器端。
+- 后续同 Subtopic 请求复用。
+- 非空状态进入 Pattern 动态教学。
+- 默认目录：`.data/baselines/{scopeKey}.json`
 - 可通过 `BASELINE_STORAGE_DIR` 覆盖。
 
-服务器文件只保存 Knowledge 基线题目，不保存用户学习数据。
+## 9. Challenge
 
-## 9. 当前 Storage
-
-LocalStorage 统一 Key：
-
-```text
-english-forest
-```
-
-结构：
-
-```ts
-interface AppStorage {
-  version: 2;
-  userId: string;
-  learningStates: LearningState[];
-  sessions: LearningSession[];
-  attempts: Attempt[];
-  questions: Question[];
-}
-```
-
-LearningState 已包含：
-
-- mastery
-- strengths
-- weaknesses
-- currentDifficulty
-- recommendedFocus
-- strategyLevel
-- summary
-- updatedAt
-
-旧版 LocalStorage 数据会迁移。
+- 所有 Subtopic completed 且 required Pattern Coverage 完成后解锁。
+- Challenge 混合所有 Subtopic 和 Pattern。
+- Challenge 失败后根据错误 Pattern 定位相关 Subtopic。
+- 结果页提供对应 Subtopic 的复习入口。
 
 ## 10. LLM Provider
 
 支持：
 
-- `mock`：无需 API Key，用于测试和离线运行。
-- `openai`：OpenAI 结构化输出。
-- `deepseek`：OpenAI 兼容 JSON Object 模式。
+- mock
+- openai
+- deepseek
 
-当前本地 `.env.local` 使用：
+当前本地使用：
 
 ```env
 LLM_PROVIDER=deepseek
@@ -230,45 +171,44 @@ LLM_MODEL=deepseek-v4-flash
 LLM_BASE_URL=https://api.deepseek.com/v1
 ```
 
-API Key 只存在于服务端环境变量，不会进入浏览器。
+API Key 仅在服务端环境变量。
 
 ## 11. 测试状态
 
 自动化测试覆盖：
 
-- A：14/15，错误分散 → accidental
-- B：9/15，y-ending 集中错误 → subtopic_weakness + 提高占比
-- C：连续 y-ending 错误 → rule_misunderstanding + explain + examples
-- D：两个 batch y-ending 失败 → persistent_failure + strategyLevel 4
-- E：9/15 → 12/15 → 14/15 → improving + 提高难度
-- F：多个 batch 稳定正确 → mastered + finish
-- questionDistribution 总数校验
-- LangGraph 启动、continue、finish
-- SessionSummary 更新 LearningState
-- Storage v2 与旧数据迁移
+- 四个 Subtopic 与 Pattern 数据
+- irregular 逐词 Coverage
+- Pattern 统计
+- y-ending 薄弱时增加 Pattern 题量
+- irregular 只覆盖 good 时 Coverage 不完整
+- Subtopic Context 隔离
+- Challenge 混合所有 Pattern
+- Pattern distribution 总数校验
+- 选项位置均衡随机
+- Baseline 缓存复用
 - DeepSeek Provider 配置
-- 选择题正确选项位置 A/B/C/D 均衡随机
 
-真实 DeepSeek 验证：
+真实 DeepSeek 已验证：
 
-- 生成 15 道题和 questionDistribution
-- 识别 y-ending 和 double-consonant 的集中错误
-- 输出 explanation 和规范化 examples
-- 生成下一批 15 道针对性题目
+- form-change 只返回六个 Pattern
+- Pattern distribution 正确
+- PatternProgress 逐项统计
+- irregular 仅覆盖 good/bad 时 `coverageComplete=false`
+- 下一批优先增加未覆盖 Pattern
 
 ## 12. 当前限制
 
-- active Session 暂不支持刷新后继续。
-- 没有真实用户数据驱动的长期 evaluator。
-- DeepSeek 返回格式仍可能需要根据 Prompt 版本继续加固。
-- 没有请求超时、自动重试和自动降级策略。
-- LocalStorage 仍是唯一持久化方式。
-- 线上 `yidongxun.com` 尚未部署该 v1 版本。
+- active Session 刷新恢复尚未实现。
+- Challenge UI 仍是基础验收版本。
+- PatternProgress 目前使用 LocalStorage，未跨设备同步。
+- 真实模型输出仍依赖 Prompt 与 Validator 持续评估。
+- 尚未部署本次 V2 内容模型到生产环境。
 
 ## 13. 下一步
 
-1. 增加 active Session 恢复。
-2. 建立 A～F 之外的真实模型回归 eval。
-3. 为 DeepSeek 增加超时、失败重试和降级到 mock 的可选策略。
-4. 增强 UI 对教学策略历史的展示。
+1. 在实际 UI 中完整走通四个 Subtopic 和 Challenge。
+2. 增加真实用户数据驱动的 Pattern eval。
+3. 增加 active Session 恢复。
+4. 增加更丰富的 Challenge 失败复习策略。
 5. 验证后部署到 `yidongxun.com`。

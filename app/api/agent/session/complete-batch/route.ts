@@ -26,6 +26,8 @@ export async function POST(request: Request) {
     const result = await runCompleteBatchGraph({
       userId: input.userId,
       knowledge,
+      mode: input.mode,
+      subtopicId: input.subtopicId,
       learningState,
       sessionId: input.sessionId,
       attempts: input.attempts,

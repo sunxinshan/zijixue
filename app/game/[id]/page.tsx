@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { GameView } from "@/components/game/GameView";
 import { getKnowledge } from "@/data/knowledge/comparative";
 
-export default async function GamePage({
+export default async function ChallengePage({
   params,
 }: {
   params: Promise<{ id: string }>;
@@ -13,5 +13,5 @@ export default async function GamePage({
 
   if (!knowledge) notFound();
 
-  return <GameView knowledge={knowledge} />;
+  return <GameView knowledge={knowledge} mode="challenge" />;
 }

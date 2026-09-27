@@ -1,19 +1,20 @@
 import type { z } from "zod";
 
 import { countConsecutiveWeakBatches } from "@/lib/agent/analysis";
-import { QUESTIONS_PER_BATCH } from "@/lib/game";
 import type { LLMProvider } from "@/lib/agent/llm";
 import {
   validateQuestionBatch,
   validateSessionSummary,
   validateTeachingStrategy,
 } from "@/lib/agent/validation";
+import { QUESTIONS_PER_BATCH } from "@/lib/game";
 import type {
   BatchGenerationContext,
   BatchPerformance,
   Difficulty,
   Knowledge,
-  KnowledgeExample,
+  Pattern,
+  PatternProgress,
   Question,
   QuestionBatch,
   QuestionDistributionItem,
@@ -23,140 +24,85 @@ import type {
   TeachingStrategy,
 } from "@/types/agent";
 
-interface ExampleEntry {
-  subtopicId: string;
-  example: KnowledgeExample;
-}
-
 function clampDifficulty(value: number): Difficulty {
   return Math.max(1, Math.min(5, Math.round(value))) as Difficulty;
 }
 
-function collectExamples(knowledge: Knowledge, subtopicId: string): ExampleEntry[] {
-  const rule = knowledge.rules.find((item) => item.subtopicId === subtopicId);
-  return (rule?.examples ?? []).map((example) => ({ subtopicId, example }));
+function allPatterns(knowledge: Knowledge): Pattern[] {
+  return knowledge.subtopics.flatMap((subtopic) => subtopic.patterns);
 }
 
-function wrongForm(base: string, form: "comparative" | "superlative"): string {
-  return form === "comparative" ? `${base}er` : `${base}est`;
+function unique<T>(values: T[]): T[] {
+  return Array.from(new Set(values));
 }
 
-function buildChoiceOptions(
-  base: string,
-  correct: string,
-  form: "comparative" | "superlative",
-  optionSeed: number,
-  simplified: boolean,
-): string[] {
-  const candidates = [
-    correct,
-    wrongForm(base, form),
-    form === "comparative" ? `more ${base}` : `most ${base}`,
-    form === "comparative" ? `${base}iest` : `${base}ier`,
-  ];
-  const unique = simplified
-    ? [correct, wrongForm(base, form)]
-    : Array.from(new Set(candidates));
-  const offset = optionSeed % unique.length;
-  return [...unique.slice(offset), ...unique.slice(0, offset)];
-}
-
-function createQuestionId(seed: string): string {
-  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
-    return `${seed}-${crypto.randomUUID()}`;
-  }
-  return `${seed}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-}
-
-function distributeRemainder(
-  knowledge: Knowledge,
-  primary: string,
-  primaryCount: number,
+function buildDistribution(
+  patterns: Pattern[],
+  priorityPatternIds: string[],
 ): QuestionDistributionItem[] {
-  const distribution: QuestionDistributionItem[] = [
-    { subtopic: primary, count: primaryCount },
-  ];
-  const others = knowledge.subtopics
-    .map((subtopic) => subtopic.id)
-    .filter((id) => id !== primary);
-  let remaining = QUESTIONS_PER_BATCH - primaryCount;
+  const counts = new Map(patterns.map((pattern) => [pattern.id, 0]));
+  const priority = unique(priorityPatternIds).filter((id) => counts.has(id));
+  const required = patterns.filter((pattern) => pattern.required).map((pattern) => pattern.id);
+  const order = unique([...priority, ...required, ...patterns.map((pattern) => pattern.id)]);
+  let assigned = 0;
 
-  for (let index = 0; remaining > 0; index += 1) {
-    const subtopic = others[index % others.length];
-    const item = distribution.find((entry) => entry.subtopic === subtopic);
-    if (item) item.count += 1;
-    else distribution.push({ subtopic, count: 1 });
-    remaining -= 1;
+  for (const patternId of order) {
+    if (assigned >= QUESTIONS_PER_BATCH) break;
+    counts.set(patternId, 1);
+    assigned += 1;
   }
 
-  return distribution;
-}
-
-function balancedDistribution(knowledge: Knowledge): QuestionDistributionItem[] {
-  const distribution = knowledge.subtopics.map((subtopic) => ({
-    subtopic: subtopic.id,
-    count: 0,
-  }));
-  for (let index = 0; index < QUESTIONS_PER_BATCH; index += 1) {
-    distribution[index % distribution.length].count += 1;
-  }
-  return distribution.filter((item) => item.count > 0);
-}
-
-function twoFocusDistribution(
-  knowledge: Knowledge,
-  first: string,
-  second: string,
-): QuestionDistributionItem[] {
-  const distribution: QuestionDistributionItem[] = [
-    { subtopic: first, count: 6 },
-    { subtopic: second, count: 6 },
-  ];
-  const others = knowledge.subtopics
-    .map((subtopic) => subtopic.id)
-    .filter((id) => id !== first && id !== second);
-  let remaining = 3;
-
-  for (let index = 0; remaining > 0; index += 1) {
-    const subtopic = others[index % others.length];
-    const item = distribution.find((entry) => entry.subtopic === subtopic);
-    if (item) item.count += 1;
-    else distribution.push({ subtopic, count: 1 });
-    remaining -= 1;
+  for (const patternId of priority) {
+    while (assigned < QUESTIONS_PER_BATCH && (counts.get(patternId) ?? 0) < 6) {
+      counts.set(patternId, (counts.get(patternId) ?? 0) + 1);
+      assigned += 1;
+    }
   }
 
-  return distribution;
+  let index = 0;
+  while (assigned < QUESTIONS_PER_BATCH && order.length > 0) {
+    const patternId = order[index % order.length];
+    counts.set(patternId, (counts.get(patternId) ?? 0) + 1);
+    assigned += 1;
+    index += 1;
+  }
+
+  return Array.from(counts.entries())
+    .filter(([, count]) => count > 0)
+    .map(([patternId, count]) => ({ patternId, count }));
 }
 
-function getWeakSubtopics(
+function weakPatterns(
   performance: BatchPerformance,
   threshold = 60,
-): { subtopic: string; accuracy: number }[] {
-  return performance.subtopicStats
+): { patternId: string; accuracy: number }[] {
+  return performance.patternStats
     .filter(
       (item) =>
-        item.accuracy < threshold &&
-        (item.total >= 3 || item.correct === 0),
+        item.accuracy < threshold && (item.total >= 2 || item.correct === 0),
     )
     .sort((left, right) => left.accuracy - right.accuracy)
-    .map((item) => ({ subtopic: item.subtopic, accuracy: item.accuracy }));
+    .map((item) => ({ patternId: item.patternId, accuracy: item.accuracy }));
 }
 
-function getStrategyExamples(
-  knowledge: Knowledge,
-  focus: string[],
+function uncoveredPatternIds(
+  patterns: Pattern[],
+  progress: Record<string, PatternProgress>,
 ): string[] {
-  return focus
-    .flatMap((subtopic) => collectExamples(knowledge, subtopic))
-    .slice(0, 3)
-    .map(
-      (entry) =>
-        `${entry.example.base} → ${entry.example.comparative} → ${entry.example.superlative}`,
-    );
+  const incomplete = patterns.filter(
+    (pattern) => pattern.required && !progress[pattern.id]?.coverageComplete,
+  );
+  return [
+    ...incomplete.filter((pattern) => (progress[pattern.id]?.attemptedQuestions ?? 0) > 0),
+    ...incomplete.filter((pattern) => (progress[pattern.id]?.attemptedQuestions ?? 0) === 0),
+  ].map((pattern) => pattern.id);
+}
+
+function exampleStrings(pattern: Pattern): string[] {
+  return pattern.examples.slice(0, 3).map((example) => example.text);
 }
 
 function makeStrategy(
-  knowledge: Knowledge,
   input: Omit<TeachingStrategy, "questionDistribution"> & {
     questionDistribution?: QuestionDistributionItem[];
   },
@@ -170,68 +116,63 @@ function makeStrategy(
 function diagnoseMockStrategy(
   context: StrategyGenerationContext,
 ): TeachingStrategy {
-  const { knowledge, learningState, observation } = context;
-  const { currentBatch, pastBatches, previousStrategies } = observation;
-  const weakSubtopics = getWeakSubtopics(currentBatch);
+  const patterns = allPatterns(context.knowledge);
+  const { currentBatch, pastBatches, previousStrategies } = context.observation;
+  const weak = weakPatterns(currentBatch);
+  const uncovered = uncoveredPatternIds(patterns, context.observation.patternProgress);
   const previousStrategy = previousStrategies.at(-1);
-  const currentDifficulty = learningState.currentDifficulty;
+  const currentDifficulty = context.learningState.currentDifficulty;
   const accuracyHistory = [
     ...pastBatches.map((batch) => batch.accuracy),
     currentBatch.accuracy,
   ];
 
   if (currentBatch.total > 0) {
-    const persistentCandidates = currentBatch.subtopicStats
-      .filter(
-        (item) =>
-          item.accuracy < 60 && (item.total >= 3 || item.correct === 0),
-      )
+    const persistent = currentBatch.patternStats
+      .filter((item) => item.accuracy < 60 && (item.total >= 2 || item.correct === 0))
       .map((item) => ({
-        subtopic: item.subtopic,
+        patternId: item.patternId,
         consecutive: countConsecutiveWeakBatches(
-          item.subtopic,
+          item.patternId,
           pastBatches,
           currentBatch,
         ),
       }))
-      .sort((left, right) => right.consecutive - left.consecutive);
+      .sort((left, right) => right.consecutive - left.consecutive)[0];
 
-    const persistent = persistentCandidates[0];
     if (persistent && persistent.consecutive >= 2) {
-      const focus = [persistent.subtopic];
-      return makeStrategy(knowledge, {
+      const focus = [persistent.patternId];
+      const pattern = patterns.find((item) => item.id === persistent.patternId);
+      return makeStrategy({
         diagnosis: "persistent_failure",
         strategyLevel: 4,
         action: "change_strategy",
         focus,
         difficulty: clampDifficulty(currentDifficulty - 1),
-        questionDistribution: distributeRemainder(knowledge, persistent.subtopic, 4),
-        explanation: `${knowledge.subtopics.find((item) => item.id === persistent.subtopic)?.title ?? persistent.subtopic} 已经连续多个 batch 不稳定，这一批改用更简单的正反例和更少干扰项。`,
-        examples: getStrategyExamples(knowledge, focus),
-        reason: "同一 subtopic 连续多个 batch 低于目标准确率，需要改变教学方式。",
+        questionDistribution: buildDistribution(patterns, focus),
+        explanation: `${pattern?.name ?? persistent.patternId} 连续多个 batch 不稳定，改用更简单、更少干扰项和正反例。`,
+        examples: pattern ? exampleStrings(pattern) : [],
+        reason: "同一 Pattern 连续多个 batch 低于目标正确率，需要改变教学方式。",
       });
     }
 
-    const consecutiveRuleFailure = Object.entries(
-      observation.consecutiveSubtopicErrors,
-    )
-      .filter(([subtopic]) =>
-        weakSubtopics.some((item) => item.subtopic === subtopic),
-      )
+    const consecutive = Object.entries(context.observation.consecutivePatternErrors)
+      .filter(([patternId]) => weak.some((item) => item.patternId === patternId))
       .sort((left, right) => right[1] - left[1])[0];
 
-    if (consecutiveRuleFailure && consecutiveRuleFailure[1] >= 3) {
-      const focus = [consecutiveRuleFailure[0]];
-      return makeStrategy(knowledge, {
+    if (consecutive && consecutive[1] >= 3) {
+      const focus = [consecutive[0]];
+      const pattern = patterns.find((item) => item.id === focus[0]);
+      return makeStrategy({
         diagnosis: "rule_misunderstanding",
         strategyLevel: 3,
         action: "explain",
         focus,
         difficulty: clampDifficulty(currentDifficulty - 1),
-        questionDistribution: distributeRemainder(knowledge, focus[0], 5),
-        explanation: `${knowledge.subtopics.find((item) => item.id === focus[0])?.title ?? focus[0]} 出现连续错误，先重新解释规则，再用简单练习确认。`,
-        examples: getStrategyExamples(knowledge, focus),
-        reason: "同一规则在当前 batch 中连续出错，判断为规则理解问题。",
+        questionDistribution: buildDistribution(patterns, focus),
+        explanation: `${pattern?.name ?? focus[0]} 出现连续错误，先重新解释规则，再用简单练习确认。`,
+        examples: pattern ? exampleStrings(pattern) : [],
+        reason: "同一 Pattern 连续出错，判断为规则理解问题。",
       });
     }
   }
@@ -244,191 +185,290 @@ function diagnoseMockStrategy(
       .every((value, index, values) => index === 0 || value > values[index - 1])
   ) {
     const focus =
-      weakSubtopics.length > 0
-        ? weakSubtopics.slice(0, 2).map((item) => item.subtopic)
-        : learningState.recommendedFocus.length > 0
-          ? learningState.recommendedFocus.slice(0, 2)
-          : [knowledge.subtopics[0].id];
-    return makeStrategy(knowledge, {
+      weak.length > 0
+        ? weak.slice(0, 2).map((item) => item.patternId)
+        : context.learningState.recommendedFocus.length > 0
+          ? context.learningState.recommendedFocus.slice(0, 2)
+          : [patterns[0].id];
+    const pattern = patterns.find((item) => item.id === focus[0]);
+    return makeStrategy({
       diagnosis: "improving",
       strategyLevel: 3,
       action: "increase_difficulty",
       focus,
       difficulty: clampDifficulty(currentDifficulty + 1),
-      questionDistribution: balancedDistribution(knowledge),
-      explanation: "表现正在连续提高，下一批增加混合题并逐步提高难度。",
-      examples: getStrategyExamples(knowledge, focus),
-      reason: "连续多个 batch 准确率提升，进入提高难度的综合练习。",
+      questionDistribution: buildDistribution(patterns, focus),
+      explanation: "表现正在连续提高，下一批增加混合和难度。",
+      examples: pattern ? exampleStrings(pattern) : [],
+      reason: "连续多个 batch 准确率提升。",
     });
   }
 
   if (
     accuracyHistory.length >= 2 &&
-    accuracyHistory.slice(-2).every((accuracy) => accuracy >= 90)
+    accuracyHistory.slice(-2).every((accuracy) => accuracy >= 90) &&
+    uncovered.length === 0
   ) {
-    return makeStrategy(knowledge, {
+    return makeStrategy({
       diagnosis: "mastered",
       strategyLevel: 5,
       action: "finish",
       focus: [],
       difficulty: currentDifficulty,
       questionDistribution: [],
-      reason: "连续多个 batch 稳定正确，达到结束 Session 的条件。",
+      reason: "连续多个 batch 稳定正确且 Coverage 完成。",
     });
   }
 
-  if (weakSubtopics.length >= 2) {
-    const focus = weakSubtopics.slice(0, 2).map((item) => item.subtopic);
-    return makeStrategy(knowledge, {
-      diagnosis: "multiple_weaknesses",
-      strategyLevel: 2,
-      action: "targeted_practice",
-      focus,
-      difficulty: currentDifficulty,
-      questionDistribution: twoFocusDistribution(knowledge, focus[0], focus[1]),
-      explanation: "多个 subtopic 同时不稳定，先集中训练优先级最高的两个。",
-      examples: getStrategyExamples(knowledge, focus),
-      reason: "当前 batch 有多个 subtopic 低于目标准确率。",
-    });
-  }
-
-  if (weakSubtopics.length === 1) {
-    const focus = [weakSubtopics[0].subtopic];
-    return makeStrategy(knowledge, {
+  if (uncovered.length > 0) {
+    const focus = uncovered.slice(0, 3);
+    return makeStrategy({
       diagnosis: "subtopic_weakness",
       strategyLevel: 2,
       action: "targeted_practice",
       focus,
       difficulty: currentDifficulty,
-      questionDistribution: distributeRemainder(knowledge, focus[0], 6),
-      reason: "错误集中在单一 subtopic，下一批提高该 subtopic 的占比。",
+      questionDistribution: buildDistribution(patterns, focus),
+      reason: "仍有 required Pattern 未完成 Coverage，优先补齐覆盖。",
+    });
+  }
+
+  if (weak.length >= 2) {
+    const focus = weak.slice(0, 2).map((item) => item.patternId);
+    return makeStrategy({
+      diagnosis: "multiple_weaknesses",
+      strategyLevel: 2,
+      action: "targeted_practice",
+      focus,
+      difficulty: currentDifficulty,
+      questionDistribution: buildDistribution(patterns, focus),
+      reason: "多个 Pattern 同时薄弱，优先训练两个最低分项。",
+    });
+  }
+
+  if (weak.length === 1) {
+    const focus = [weak[0].patternId];
+    return makeStrategy({
+      diagnosis: "subtopic_weakness",
+      strategyLevel: 2,
+      action: "targeted_practice",
+      focus,
+      difficulty: currentDifficulty,
+      questionDistribution: buildDistribution(patterns, focus),
+      reason: "错误集中在单一 Pattern。",
     });
   }
 
   if (currentBatch.accuracy >= 85 && previousStrategy?.diagnosis !== "mastered") {
-    return makeStrategy(knowledge, {
+    return makeStrategy({
       diagnosis: "accidental",
       strategyLevel: 1,
       action: "continue",
       focus: [],
       difficulty: currentDifficulty,
-      questionDistribution: balancedDistribution(knowledge),
-      reason: "错误没有明显集中，保持正常练习。",
+      questionDistribution: buildDistribution(patterns, []),
+      reason: "错误没有明显集中，正常继续。",
     });
   }
 
-  return makeStrategy(knowledge, {
+  return makeStrategy({
     diagnosis: "accidental",
     strategyLevel: 1,
     action: "continue",
     focus: [],
     difficulty: currentDifficulty,
-    questionDistribution: balancedDistribution(knowledge),
-    reason: "暂未发现稳定的错误模式，继续收集学习表现。",
+    questionDistribution: buildDistribution(patterns, uncovered),
+    reason: "继续收集 Pattern 表现。",
   });
 }
 
-function buildQuestionPlan(
-  knowledge: Knowledge,
-  strategy: TeachingStrategy,
-): ExampleEntry[] {
-  const distribution =
-    strategy.questionDistribution.length > 0
-      ? strategy.questionDistribution
-      : balancedDistribution(knowledge);
-  return distribution.flatMap((item) =>
-    Array.from({ length: item.count }, (_, index) => {
-      const examples = collectExamples(knowledge, item.subtopic);
-      return examples[index % examples.length];
-    }),
-  );
+interface GeneratedQuestionData {
+  question: string;
+  options?: string[];
+  answer: string | boolean;
+  explanation: string;
+  coverageItemId?: string;
+}
+
+function grammarQuestion(
+  pattern: Pattern,
+  index: number,
+): GeneratedQuestionData {
+  const coverageItemId =
+    pattern.coverageItems?.[index % pattern.coverageItems.length];
+  if (pattern.id === "comparative-form") {
+    const example = pattern.examples[index % pattern.examples.length];
+    return {
+      question: `${example.base ?? "tall"} 的比较级是？`,
+      options: [example.comparative ?? "taller", `${example.base ?? "tall"}est`, `more ${example.base ?? "tall"}`],
+      answer: example.comparative ?? "taller",
+      explanation: pattern.description,
+      coverageItemId: example.coverageItemId ?? coverageItemId,
+    };
+  }
+  if (pattern.id === "superlative-form") {
+    const example = pattern.examples[index % pattern.examples.length];
+    return {
+      question: `${example.base ?? "tall"} 的最高级是？`,
+      options: [example.superlative ?? "tallest", `${example.base ?? "tall"}er`, `most ${example.base ?? "tall"}`],
+      answer: example.superlative ?? "tallest",
+      explanation: pattern.description,
+      coverageItemId: example.coverageItemId ?? coverageItemId,
+    };
+  }
+
+  const templates: Record<
+    string,
+    { question: string; options: string[]; answer: string; explanation: string }
+  > = {
+    "comparative-than": {
+      question: "Tom is taller ___ Ken.",
+      options: ["than", "as", "of"],
+      answer: "than",
+      explanation: "比较级后用 than 引出比较对象。",
+    },
+    "which-comparative": {
+      question: "Which is longer, April ___ May?",
+      options: ["or", "and", "than"],
+      answer: "or",
+      explanation: "Which A or B? 表示两个对象中选一个。",
+    },
+    "superlative-the": {
+      question: "Tom is ___ tallest.",
+      options: ["the", "a", "than"],
+      answer: "the",
+      explanation: "最高级前通常使用 the。",
+    },
+    "superlative-of": {
+      question: "Tom is the tallest ___ the three.",
+      options: ["of", "in", "than"],
+      answer: "of",
+      explanation: "of 表示范围中的人或物。",
+    },
+    "superlative-in": {
+      question: "I run the fastest ___ my class.",
+      options: ["in", "of", "than"],
+      answer: "in",
+      explanation: "in 表示地点或班级范围。",
+    },
+    "which-superlative": {
+      question: "___ animal is the strongest?",
+      options: ["Which", "Who", "What"],
+      answer: "Which",
+      explanation: "Which + 最高级用于从范围中提问。",
+    },
+    "as-as": {
+      question: "My dog is ___ big as yours.",
+      options: ["as", "than", "more"],
+      answer: "as",
+      explanation: "as + 形容词 + as 表示和……一样。",
+    },
+    "not-as-as": {
+      question: "I'm ___ as tall as Penny.",
+      options: ["not", "more", "than"],
+      answer: "not",
+      explanation: "not as...as 表示没有……那么……。",
+    },
+  };
+
+  const template = templates[pattern.id] ?? {
+    question: `请选择符合 ${pattern.name} 的句子。`,
+    options: pattern.examples.slice(0, 3).map((example) => example.text),
+    answer: pattern.examples[0]?.text ?? pattern.name,
+    explanation: pattern.description,
+  };
+
+  return {
+    ...template,
+    options: [...template.options],
+    explanation: template.explanation,
+    coverageItemId,
+  };
+}
+
+function formQuestion(
+  pattern: Pattern,
+  index: number,
+): GeneratedQuestionData {
+  const examples = pattern.examples;
+  const example = examples[index % examples.length];
+  const form = index % 2 === 0 ? "comparative" : "superlative";
+  const correct =
+    form === "comparative"
+      ? example.comparative ?? example.text
+      : example.superlative ?? example.text;
+  const label = form === "comparative" ? "比较级" : "最高级";
+  const wrong = [
+    `${example.base ?? "word"}er`,
+    form === "comparative" ? `more ${example.base ?? "word"}` : `most ${example.base ?? "word"}`,
+  ];
+  const options = Array.from(new Set([correct, ...wrong])).slice(0, 4);
+
+  return {
+    question: `${example.base ?? "word"} 的${label}是？`,
+    options,
+    answer: correct,
+    explanation: `${pattern.name}：${example.text}`,
+    coverageItemId: example.coverageItemId,
+  };
 }
 
 function generateMockQuestions(context: BatchGenerationContext): QuestionBatch {
-  const plan = buildQuestionPlan(context.knowledge, context.strategy);
-  const previous = new Set(context.previousQuestions);
+  const patterns = allPatterns(context.knowledge);
+  const patternById = new Map(patterns.map((pattern) => [pattern.id, pattern]));
+  const plan = context.strategy.questionDistribution.flatMap((item) => {
+    const pattern = patternById.get(item.patternId);
+    return pattern ? Array.from({ length: item.count }, () => pattern) : [];
+  });
+  const seenQuestions = new Set(context.previousQuestions);
   const questions: Question[] = [];
 
   for (let index = 0; index < plan.length && questions.length < QUESTIONS_PER_BATCH; index += 1) {
-    const entry = plan[index];
-    const form = index % 2 === 0 ? "comparative" : "superlative";
-    const correct = entry.example[form];
-    const improvedMode = context.strategy.strategyLevel >= 3;
-    const persistentMode = context.strategy.diagnosis === "persistent_failure";
-    const type = persistentMode
-      ? index % 2 === 0
-        ? "true-false"
-        : "choice"
-      : improvedMode
-        ? index % 3 === 0
-          ? "true-false"
-          : "choice"
-        : index % 4 < 2
-          ? "choice"
-          : "true-false";
-    const difficulty = clampDifficulty(
-      context.strategy.difficulty +
-        (index % 3 === 0 ? -1 : index % 3 === 2 ? 1 : 0),
-    );
-    const subtopic = context.knowledge.subtopics.find(
-      (item) => item.id === entry.subtopicId,
-    );
+    const pattern = plan[index];
+    const isFormPattern =
+      Boolean(pattern.examples[0]?.comparative) &&
+      Boolean(pattern.examples[0]?.superlative);
+    const generated = isFormPattern
+      ? formQuestion(pattern, index)
+      : grammarQuestion(pattern, index);
+    const type = index % 3 === 0 ? "true-false" : "choice";
+    let questionText = generated.question;
+    let answer = generated.answer;
+    let options = generated.options;
 
-    let questionText: string;
-    let answer: string | boolean;
-    let options: string[] | undefined;
-    let explanation: string;
-
-    if (type === "choice") {
-      questionText = persistentMode
-        ? `选出正确形式：${entry.example.base} 的${
-            form === "comparative" ? "比较级" : "最高级"
-          }`
-        : `${entry.example.base} 的${
-            form === "comparative" ? "比较级" : "最高级"
-          }是？`;
-      answer = correct;
-      options = buildChoiceOptions(
-        entry.example.base,
-        correct,
-        form,
-        index,
-        improvedMode || persistentMode,
-      );
-      explanation = `${subtopic?.title ?? entry.subtopicId}：${entry.example.base} → ${entry.example.comparative} → ${entry.example.superlative}。`;
-    } else {
-      const shouldBeTrue = improvedMode ? index % 3 !== 1 : index % 2 === 0;
-      const shown = shouldBeTrue
-        ? correct
-        : wrongForm(entry.example.base, form);
-      questionText = `“${shown}”是 ${entry.example.base} 的${
-        form === "comparative" ? "比较级" : "最高级"
-      }。`;
-      answer = shouldBeTrue;
-      explanation = `${entry.example.base} 的${form === "comparative" ? "比较级" : "最高级"}是 ${correct}。`;
+    if (type === "true-false") {
+      if (typeof answer !== "string") continue;
+      const showCorrect = index % 2 === 0;
+      const shown = showCorrect
+        ? answer
+        : options?.find((option) => option !== answer) ?? answer;
+      questionText = `“${shown}”是正确形式。`;
+      answer = showCorrect;
+      options = undefined;
     }
 
-    const seen = new Set([
-      ...previous,
-      ...questions.map((question) => question.question),
-    ]);
-    if (seen.has(questionText)) {
-      questionText = `请完成：${questionText}`;
+    if (seenQuestions.has(questionText)) {
+      questionText = `请选择：${questionText}`;
     }
-    if (seen.has(questionText)) {
+    if (seenQuestions.has(questionText)) {
       questionText = `${questionText}（第 ${index + 1} 题）`;
     }
+    seenQuestions.add(questionText);
 
     questions.push({
-      id: createQuestionId(`mock-q${context.batchNumber}-${index}`),
+      id: `mock-${pattern.id}-${context.batchNumber}-${index}`,
       type,
       question: questionText,
       options,
       answer,
-      explanation,
+      explanation: generated.explanation,
       knowledgeId: context.knowledge.id,
-      knowledgeSubtopic: entry.subtopicId,
-      difficulty,
+      knowledgeSubtopic: pattern.subtopicId,
+      patternId: pattern.id,
+      coverageItemId: generated.coverageItemId,
+      difficulty: clampDifficulty(
+        context.strategy.difficulty + (index % 3 === 0 ? -1 : index % 3 === 2 ? 1 : 0),
+      ),
     });
   }
 
@@ -436,52 +476,39 @@ function generateMockQuestions(context: BatchGenerationContext): QuestionBatch {
 }
 
 function summarizeMockSession(context: SessionSummaryContext): SessionSummary {
-  const questionById = new Map(
-    context.questions.map((question) => [question.id, question]),
-  );
-  const stats = context.knowledge.subtopics.map((subtopic) => {
+  const questionById = new Map(context.questions.map((question) => [question.id, question]));
+  const patternStats = allPatterns(context.knowledge).map((pattern) => {
     const attempts = context.attempts.filter(
-      (attempt) =>
-        questionById.get(attempt.questionId)?.knowledgeSubtopic === subtopic.id,
+      (attempt) => questionById.get(attempt.questionId)?.patternId === pattern.id,
     );
     const correct = attempts.filter((attempt) => attempt.correct).length;
     return {
-      id: subtopic.id,
-      title: subtopic.title,
+      id: pattern.id,
+      name: pattern.name,
       total: attempts.length,
       accuracy: attempts.length > 0 ? correct / attempts.length : 0,
     };
   });
-
-  const totalCorrect = context.attempts.filter((attempt) => attempt.correct).length;
-  const overallAccuracy =
-    context.attempts.length > 0 ? totalCorrect / context.attempts.length : 0;
-  const practiced = stats.filter((item) => item.total > 0);
-  const strengths = practiced
-    .filter((item) => item.accuracy >= 0.8)
-    .map((item) => item.title);
-  const weaknesses = practiced
-    .filter((item) => item.accuracy < 0.8)
-    .map((item) => item.title);
+  const practiced = patternStats.filter((item) => item.total > 0);
+  const overall = context.attempts.length
+    ? context.attempts.filter((attempt) => attempt.correct).length / context.attempts.length
+    : 0;
+  const strengths = practiced.filter((item) => item.accuracy >= 0.8).map((item) => item.name);
+  const weaknesses = practiced.filter((item) => item.accuracy < 0.8).map((item) => item.name);
   const recommendedFocus = practiced
     .filter((item) => item.accuracy < 0.8)
     .sort((left, right) => left.accuracy - right.accuracy)
     .map((item) => item.id);
-  const finalStrategy = context.strategies.at(-1);
-  const mastery = Math.round(
-    overallAccuracy * 80 +
-      (finalStrategy?.diagnosis === "mastered" ? 20 : Math.min(context.attempts.length, 30) / 2),
-  );
 
   return {
-    mastery: Math.max(0, Math.min(100, mastery)),
+    mastery: Math.round(overall * 100),
     strengths,
     weaknesses,
     recommendedFocus,
     summary:
-      finalStrategy?.diagnosis === "mastered"
-        ? "多个 batch 表现稳定，已经达到本 Knowledge 的阶段目标。"
-        : "学生的表现正在变化，建议继续按当前教学策略巩固薄弱 subtopic。",
+      recommendedFocus.length > 0
+        ? "部分 Pattern 仍需继续巩固，优先完成弱项训练和 Coverage。"
+        : "当前 Pattern 表现稳定，可以继续混合验证或完成该关卡。",
   };
 }
 
@@ -501,11 +528,12 @@ export function createMockLLMProvider(): LLMProvider {
 
       if (task === "generate_question_batch") {
         const generationContext = context as BatchGenerationContext;
-        const batch = generateMockQuestions(generationContext);
-        return validateQuestionBatch(
-          batch,
-          generationContext.knowledge,
-          generationContext.strategy.questionDistribution,
+        return randomizeOptions(
+          validateQuestionBatch(
+            generateMockQuestions(generationContext),
+            generationContext.knowledge,
+            generationContext.strategy.questionDistribution,
+          ),
         ) as T;
       }
 
@@ -520,4 +548,26 @@ export function createMockLLMProvider(): LLMProvider {
       throw new Error(`未知 Mock Provider 任务：${String(task)}`);
     },
   };
+}
+
+function randomizeOptions(batch: QuestionBatch): QuestionBatch {
+  const questions = [...batch.questions];
+  const choiceIndexes = questions
+    .map((question, index) => ({ question, index }))
+    .filter(({ question }) => question.type === "choice" && question.options);
+  const positions = choiceIndexes.map((_, index) => index % 4);
+
+  choiceIndexes.forEach(({ question, index }, positionIndex) => {
+    if (!question.options || typeof question.answer !== "string") return;
+    const distractors = question.options.filter((option) => option !== question.answer);
+    const reordered = [...distractors];
+    reordered.splice(
+      Math.min(positions[positionIndex], reordered.length),
+      0,
+      question.answer,
+    );
+    questions[index] = { ...question, options: reordered };
+  });
+
+  return { questions };
 }

@@ -17,7 +17,8 @@ import {
 } from "@/lib/game";
 import {
   completeSession,
-  getLearningState,
+  getSubtopicLearningState,
+  getSubtopicLearningStates,
   loadAgentStorage,
   recordAttempt,
   saveQuestions,
@@ -30,6 +31,8 @@ import type {
   LearningSession,
   LearningState,
   QuestionBatch,
+  SessionMode,
+  Subtopic,
   TeachingStrategy,
 } from "@/types/agent";
 
@@ -58,7 +61,15 @@ function formatAnswer(answer: string | boolean): string {
   return answer;
 }
 
-export function GameView({ knowledge }: { knowledge: Knowledge }) {
+export function GameView({
+  knowledge,
+  mode,
+  subtopic,
+}: {
+  knowledge: Knowledge;
+  mode: SessionMode;
+  subtopic?: Subtopic;
+}) {
   const router = useRouter();
   const initialized = useRef(false);
   const [status, setStatus] = useState<GameStatus>("loading");
@@ -83,11 +94,17 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
     async function initialize() {
       try {
         const storage = loadAgentStorage();
-        const currentLearningState = getLearningState(storage, knowledge.id);
+        const currentLearningState =
+          mode === "subtopic" && subtopic
+            ? getSubtopicLearningState(storage, knowledge.id, subtopic.id)
+            : undefined;
         const response = await startAgentSession({
           userId: storage.userId,
           knowledge,
+          mode,
+          subtopicId: subtopic?.id,
           learningState: currentLearningState,
+          subtopicStates: getSubtopicLearningStates(storage, knowledge.id),
         });
 
         upsertSession(response.session);
@@ -110,7 +127,7 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
     }
 
     void initialize();
-  }, [knowledge]);
+  }, [knowledge, mode, subtopic]);
 
   const currentQuestion = currentBatch?.questions[currentIndex];
 
@@ -122,6 +139,9 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
       id: createLocalId("attempt"),
       sessionId: session.id,
       knowledgeId: knowledge.id,
+      subtopicId: currentQuestion.knowledgeSubtopic,
+      patternId: currentQuestion.patternId,
+      coverageItemId: currentQuestion.coverageItemId,
       questionId: currentQuestion.id,
       answer,
       correct,
@@ -167,6 +187,8 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
       const response = await completeAgentBatch({
         userId: session.userId,
         knowledge,
+        mode,
+        subtopicId: subtopic?.id,
         learningState,
         sessionId: session.id,
         attempts: batchAttempts,
@@ -297,7 +319,9 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
       latestStrategy
         ?.focus.map(
           (id) =>
-            knowledge.subtopics.find((subtopic) => subtopic.id === id)?.title,
+            knowledge.subtopics
+              .flatMap((item) => item.patterns)
+              .find((pattern) => pattern.id === id)?.name,
         )
         .filter((title): title is string => Boolean(title)) ?? [];
 
@@ -406,10 +430,10 @@ export function GameView({ knowledge }: { knowledge: Knowledge }) {
             </span>
             <span className="rounded-full bg-[#fff5d4] px-3 py-1 text-xs font-black text-[#8a5a00]">
               {
-                knowledge.subtopics.find(
-                  (subtopic) =>
-                    subtopic.id === currentQuestion.knowledgeSubtopic,
-                )?.title
+                knowledge.subtopics
+                  .flatMap((item) => item.patterns)
+                  .find((pattern) => pattern.id === currentQuestion.patternId)
+                  ?.name
               }
             </span>
             <span className="rounded-full bg-[#eef3fb] px-3 py-1 text-xs font-black text-[#496887]">

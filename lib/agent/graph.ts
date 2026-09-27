@@ -1,6 +1,7 @@
 import { Annotation, END, START, StateGraph } from "@langchain/langgraph";
 
 import { analyzeBatch, createInitialObservation } from "@/lib/agent/analysis";
+import { applyBatchToPatternProgress } from "@/lib/agent/coverage";
 import {
   createBaselineStrategy,
   getOrCreateBaselineBatch,
@@ -33,8 +34,10 @@ import type {
   Knowledge,
   LearningState,
   QuestionBatch,
+  SessionMode,
   SessionSummary,
   StrategyGenerationContext,
+  Subtopic,
   TeachingStrategy,
 } from "@/types/agent";
 
@@ -48,6 +51,8 @@ function replaceValue<T>(fallback: () => T) {
 const StartGraphState = Annotation.Root({
   userId: Annotation<string>(),
   knowledge: Annotation<Knowledge>(),
+  mode: Annotation<SessionMode>(),
+  subtopicId: Annotation<string | undefined>(),
   learningState: Annotation<LearningState>(),
   sessionId: Annotation<string>(
     replaceValue<string>(() => createLocalId("session")),
@@ -70,6 +75,8 @@ const StartGraphState = Annotation.Root({
 const CompletionGraphState = Annotation.Root({
   userId: Annotation<string>(),
   knowledge: Annotation<Knowledge>(),
+  mode: Annotation<SessionMode>(),
+  subtopicId: Annotation<string | undefined>(),
   learningState: Annotation<LearningState>(),
   sessionId: Annotation<string>(),
   attempts: Annotation<Attempt[]>(),
@@ -98,6 +105,26 @@ const CompletionGraphState = Annotation.Root({
     replaceValue<LearningState | null>(() => null),
   ),
 });
+
+function getScopedKnowledge(
+  knowledge: Knowledge,
+  mode: SessionMode,
+  subtopicId?: string,
+): Knowledge {
+  if (mode === "challenge") return knowledge;
+  const subtopic = knowledge.subtopics.find((item) => item.id === subtopicId);
+  if (!subtopic) {
+    throw new AgentValidationError(`未知 Subtopic：${subtopicId ?? "missing"}`);
+  }
+  return { ...knowledge, subtopics: [subtopic] };
+}
+
+function getSubtopic(
+  knowledge: Knowledge,
+  subtopicId?: string,
+): Subtopic | undefined {
+  return knowledge.subtopics.find((item) => item.id === subtopicId);
+}
 
 function assignProgramQuestionIds(
   batch: QuestionBatch,
@@ -158,20 +185,31 @@ function createStartGraph(
   const analyzeLearningState = async (
     state: typeof StartGraphState.State,
   ) => {
+    const scopedKnowledge = getScopedKnowledge(
+      state.knowledge,
+      state.mode,
+      state.subtopicId,
+    );
     if (!state.isEmptyState) {
       return {
-        observation: createInitialObservation(),
+        observation: createInitialObservation(state.learningState.patternProgress),
       };
     }
 
+    const scopeKey =
+      state.mode === "challenge"
+        ? `${state.knowledge.id}:challenge`
+        : `${state.knowledge.id}:subtopic:${state.subtopicId}`;
     const baselineBatch = await getOrCreateBaselineBatch({
-      knowledge: state.knowledge,
+      knowledge: scopedKnowledge,
+      learningState: state.learningState,
+      scopeKey,
       provider,
       store: baselineStore,
     });
     return {
       baselineBatch,
-      observation: createInitialObservation(),
+      observation: createInitialObservation(state.learningState.patternProgress),
     };
   };
 
@@ -180,7 +218,7 @@ function createStartGraph(
   ) => {
     if (state.baselineBatch) {
       return {
-        strategy: createBaselineStrategy(state.knowledge, state.baselineBatch),
+        strategy: createBaselineStrategy(state.baselineBatch),
       };
     }
 
@@ -189,7 +227,7 @@ function createStartGraph(
     }
     const context: StrategyGenerationContext = {
       task: "generate_teaching_strategy",
-      knowledge: state.knowledge,
+      knowledge: getScopedKnowledge(state.knowledge, state.mode, state.subtopicId),
       learningState: state.learningState,
       observation: state.observation,
     };
@@ -212,7 +250,7 @@ function createStartGraph(
     }
     const context: BatchGenerationContext = {
       task: "generate_question_batch",
-      knowledge: state.knowledge,
+      knowledge: getScopedKnowledge(state.knowledge, state.mode, state.subtopicId),
       learningState: state.learningState,
       strategy: state.strategy,
       batchNumber: 1,
@@ -275,13 +313,31 @@ function createCompletionGraph(provider: LLMProvider) {
   const analyzeBatchNode = async (
     state: typeof CompletionGraphState.State,
   ) => {
+    const patterns = getScopedKnowledge(
+      state.knowledge,
+      state.mode,
+      state.subtopicId,
+    ).subtopics.flatMap((subtopic) => subtopic.patterns);
+    const patternProgress = applyBatchToPatternProgress(
+      patterns,
+      state.currentBatch.questions,
+      state.attempts,
+      state.learningState.patternProgress,
+    );
+    const learningState = {
+      ...state.learningState,
+      patternProgress,
+    };
+
     return {
+      learningState,
       observation: analyzeBatch({
         batchNumber: state.batchNumber,
         attempts: state.attempts,
         currentBatch: state.currentBatch,
         pastBatches: state.pastBatches,
         previousStrategies: state.strategies,
+        patternProgress,
       }),
     };
   };
@@ -294,7 +350,7 @@ function createCompletionGraph(provider: LLMProvider) {
     }
     const context: StrategyGenerationContext = {
       task: "generate_teaching_strategy",
-      knowledge: state.knowledge,
+      knowledge: getScopedKnowledge(state.knowledge, state.mode, state.subtopicId),
       learningState: state.learningState,
       observation: state.observation,
     };
@@ -311,7 +367,7 @@ function createCompletionGraph(provider: LLMProvider) {
     }
     const context: BatchGenerationContext = {
       task: "generate_question_batch",
-      knowledge: state.knowledge,
+      knowledge: getScopedKnowledge(state.knowledge, state.mode, state.subtopicId),
       learningState: state.learningState,
       strategy: state.strategy,
       batchNumber: state.batchNumber + 1,
@@ -335,7 +391,7 @@ function createCompletionGraph(provider: LLMProvider) {
     }
     const context = {
       task: "summarize_session" as const,
-      knowledge: state.knowledge,
+      knowledge: getScopedKnowledge(state.knowledge, state.mode, state.subtopicId),
       learningState: state.learningState,
       attempts: state.attempts,
       questions: state.currentBatch.questions,
@@ -358,12 +414,15 @@ function createCompletionGraph(provider: LLMProvider) {
       throw new AgentValidationError("save_learning_state 缺少 Summary 或 Strategy");
     }
     return {
-      updatedLearningState: buildLearningStateFromSummary(
-        state.learningState,
-        state.knowledge,
-        state.sessionSummary,
-        [...state.strategies, state.strategy],
-      ),
+      updatedLearningState: buildLearningStateFromSummary({
+        current: state.learningState,
+        knowledge: getScopedKnowledge(state.knowledge, state.mode, state.subtopicId),
+        subtopic: getSubtopic(state.knowledge, state.subtopicId),
+        summary: state.sessionSummary,
+        strategies: [...state.strategies, state.strategy],
+        attempts: state.attempts,
+        questions: state.currentBatch.questions,
+      }),
     };
   };
 
@@ -394,6 +453,8 @@ function createCompletionGraph(provider: LLMProvider) {
 export interface StartSessionGraphInput {
   userId: string;
   knowledge: Knowledge;
+  mode: SessionMode;
+  subtopicId?: string;
   learningState: LearningState;
   isEmptyState: boolean;
 }
@@ -422,6 +483,8 @@ export async function runStartSessionGraph(
 export interface CompleteBatchGraphInput {
   userId: string;
   knowledge: Knowledge;
+  mode: SessionMode;
+  subtopicId?: string;
   learningState: LearningState;
   sessionId: string;
   attempts: Attempt[];

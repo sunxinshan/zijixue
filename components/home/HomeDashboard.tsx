@@ -13,14 +13,21 @@ import {
   getTotalXp,
 } from "@/lib/game";
 import { getMasteryMeta } from "@/lib/mastery";
-import { getLearningState } from "@/lib/storage";
+import { getSubtopicLearningStates } from "@/lib/storage";
 import { useAppStorage } from "@/lib/use-app-storage";
 
 export function HomeDashboard() {
   const storage = useAppStorage();
 
   const view = useMemo(() => {
-    const learningState = getLearningState(storage, comparativeKnowledge.id);
+    const subtopicStates = getSubtopicLearningStates(storage, comparativeKnowledge.id);
+    const aggregateMastery =
+      subtopicStates.length > 0
+        ? Math.round(
+            subtopicStates.reduce((sum, state) => sum + state.mastery, 0) /
+              subtopicStates.length,
+          )
+        : 0;
     const stats = getSubtopicStats(storage, comparativeKnowledge);
     const completedSessions = storage.sessions.filter(
       (session) => session.status === "completed",
@@ -35,16 +42,18 @@ export function HomeDashboard() {
         return calculateStars(correct, attempts.length);
       }),
     );
-    const focusTitles = (learningState?.recommendedFocus ?? [])
+    const focusTitles = (subtopicStates.flatMap((state) => state.recommendedFocus))
       .map(
         (id) =>
-          comparativeKnowledge.subtopics.find((subtopic) => subtopic.id === id)
-            ?.title,
+          comparativeKnowledge.subtopics
+            .flatMap((subtopic) => subtopic.patterns)
+            .find((pattern) => pattern.id === id)?.name,
       )
       .filter((title): title is string => Boolean(title));
 
     return {
-      learningState,
+      aggregateMastery,
+      subtopicStates,
       stats,
       bestStars,
       focusTitles,
@@ -59,7 +68,7 @@ export function HomeDashboard() {
     };
   }, [storage]);
 
-  const mastery = view.learningState?.mastery ?? 0;
+  const mastery = view.aggregateMastery;
   const masteryMeta = getMasteryMeta(mastery);
 
   return (
