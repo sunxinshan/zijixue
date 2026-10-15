@@ -47,15 +47,22 @@ export function createFallbackProvider(
   fallback: LLMProvider,
   timeoutMs = getLLMTimeoutMs(),
 ): LLMProvider {
+  let fallbackUntil = 0;
+
   return {
     kind: primary.kind,
     async generate(prompt, schema, context) {
+      if (Date.now() < fallbackUntil) {
+        return fallback.generate(prompt, schema, context);
+      }
+
       try {
         return await withLLMTimeout(
           primary.generate(prompt, schema, context),
           resolveLLMCallTimeout(context, timeoutMs),
         );
       } catch (error) {
+        fallbackUntil = Date.now() + 60_000;
         console.error(
           `${primary.kind} provider 调用失败，使用本地教学降级策略`,
           error instanceof Error ? error.message : error,

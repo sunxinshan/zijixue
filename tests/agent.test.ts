@@ -249,19 +249,30 @@ test("LLM 请求超时会主动结束而不是永久等待", async () => {
   );
 });
 
-test("主 LLM 超时时自动使用本地教学降级策略", async () => {
+test("主 LLM 超时时自动使用本地教学降级策略并熔断后续调用", async () => {
+  let primaryCalls = 0;
+  let fallbackCalls = 0;
   const primary: LLMProvider = {
     kind: "primary",
-    generate: <T>() => new Promise<T>(() => {}),
+    generate: <T>() => {
+      primaryCalls += 1;
+      return new Promise<T>(() => {});
+    },
   };
   const fallback: LLMProvider = {
     kind: "fallback",
-    generate: async <T>() => ({ ok: true }) as T,
+    generate: async <T>() => {
+      fallbackCalls += 1;
+      return { ok: true } as T;
+    },
   };
   const provider = createFallbackProvider(primary, fallback, 10);
   const schema = z.object({ ok: z.boolean() });
 
   assert.deepEqual(await provider.generate("prompt", schema), { ok: true });
+  assert.deepEqual(await provider.generate("prompt", schema), { ok: true });
+  assert.equal(primaryCalls, 1);
+  assert.equal(fallbackCalls, 2);
 });
 
 test("策略分析与总结使用更短的降级超时", () => {
