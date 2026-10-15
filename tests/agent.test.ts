@@ -7,6 +7,7 @@ import {
   createFallbackProvider,
   createLLMProvider,
   getLLMTimeoutMs,
+  resolveLLMCallTimeout,
   withLLMTimeout,
 } from "@/lib/agent/provider";
 import { createMockLLMProvider } from "@/lib/agent/providers/mock";
@@ -261,6 +262,21 @@ test("主 LLM 超时时自动使用本地教学降级策略", async () => {
   const schema = z.object({ ok: z.boolean() });
 
   assert.deepEqual(await provider.generate("prompt", schema), { ok: true });
+});
+
+test("策略分析与总结使用更短的降级超时", () => {
+  assert.equal(
+    resolveLLMCallTimeout({ task: "generate_teaching_strategy" }, 60_000),
+    30_000,
+  );
+  assert.equal(
+    resolveLLMCallTimeout({ task: "summarize_session" }, 60_000),
+    30_000,
+  );
+  assert.equal(
+    resolveLLMCallTimeout({ task: "generate_question_batch" }, 60_000),
+    60_000,
+  );
 });
 
 test("LLM 超时时间可通过环境变量配置", () => {

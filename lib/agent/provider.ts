@@ -3,6 +3,7 @@ import { createMockLLMProvider } from "@/lib/agent/providers/mock";
 import { createOpenAIProvider } from "@/lib/agent/providers/openai";
 
 const DEFAULT_LLM_TIMEOUT_MS = 60_000;
+const ANALYSIS_TIMEOUT_MS = 30_000;
 
 export function getLLMTimeoutMs(): number {
   const configured = Number(process.env.LLM_TIMEOUT_MS);
@@ -27,6 +28,20 @@ export function withLLMTimeout<T>(
   });
 }
 
+export function resolveLLMCallTimeout(
+  context: unknown,
+  timeoutMs = getLLMTimeoutMs(),
+): number {
+  const task = (context as { task?: string } | undefined)?.task;
+  if (
+    task === "generate_teaching_strategy" ||
+    task === "summarize_session"
+  ) {
+    return Math.min(timeoutMs, ANALYSIS_TIMEOUT_MS);
+  }
+  return timeoutMs;
+}
+
 export function createFallbackProvider(
   primary: LLMProvider,
   fallback: LLMProvider,
@@ -38,7 +53,7 @@ export function createFallbackProvider(
       try {
         return await withLLMTimeout(
           primary.generate(prompt, schema, context),
-          timeoutMs,
+          resolveLLMCallTimeout(context, timeoutMs),
         );
       } catch (error) {
         console.error(
