@@ -8,6 +8,7 @@ export interface OpenAIProviderConfig {
   model: string;
   baseUrl?: string;
   providerName?: string;
+  timeoutMs?: number;
 }
 
 function contentToText(content: unknown): string {
@@ -40,7 +41,8 @@ export function createOpenAIProvider(config: OpenAIProviderConfig): LLMProvider 
   const model = new ChatOpenAI({
     apiKey: config.apiKey,
     model: config.model,
-    maxRetries: 2,
+    maxRetries: 1,
+    timeout: config.timeoutMs,
     configuration: config.baseUrl ? { baseURL: config.baseUrl } : undefined,
   });
 

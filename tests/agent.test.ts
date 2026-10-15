@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { comparativeKnowledge, getSubtopic } from "@/data/knowledge/comparative";
-import { createLLMProvider } from "@/lib/agent/provider";
+import {
+  createLLMProvider,
+  getLLMTimeoutMs,
+  withLLMTimeout,
+} from "@/lib/agent/provider";
 import { createMockLLMProvider } from "@/lib/agent/providers/mock";
 import {
   questionBatchPublicSchema,
@@ -232,6 +236,22 @@ test("选择题正确选项位置在 ABCD 中均衡随机", async () => {
     ),
     [4, 4, 4, 4],
   );
+});
+
+test("LLM 请求超时会主动结束而不是永久等待", async () => {
+  await assert.rejects(
+    withLLMTimeout(new Promise<never>(() => {}), 10),
+    /模型响应超时/,
+  );
+});
+
+test("LLM 超时时间可通过环境变量配置", () => {
+  const previous = process.env.LLM_TIMEOUT_MS;
+  process.env.LLM_TIMEOUT_MS = "45000";
+  assert.equal(getLLMTimeoutMs(), 45000);
+
+  if (previous === undefined) delete process.env.LLM_TIMEOUT_MS;
+  else process.env.LLM_TIMEOUT_MS = previous;
 });
 
 test("deepseek Provider 使用可配置模型和兼容接口", () => {
