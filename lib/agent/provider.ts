@@ -2,7 +2,7 @@ import type { LLMProvider } from "@/lib/agent/llm";
 import { createMockLLMProvider } from "@/lib/agent/providers/mock";
 import { createOpenAIProvider } from "@/lib/agent/providers/openai";
 
-const DEFAULT_LLM_TIMEOUT_MS = 120_000;
+const DEFAULT_LLM_TIMEOUT_MS = 60_000;
 
 export function getLLMTimeoutMs(): number {
   const configured = Number(process.env.LLM_TIMEOUT_MS);
@@ -25,6 +25,30 @@ export function withLLMTimeout<T>(
   return Promise.race([operation, timeout]).finally(() => {
     if (timeoutId) clearTimeout(timeoutId);
   });
+}
+
+export function createFallbackProvider(
+  primary: LLMProvider,
+  fallback: LLMProvider,
+  timeoutMs = getLLMTimeoutMs(),
+): LLMProvider {
+  return {
+    kind: primary.kind,
+    async generate(prompt, schema, context) {
+      try {
+        return await withLLMTimeout(
+          primary.generate(prompt, schema, context),
+          timeoutMs,
+        );
+      } catch (error) {
+        console.error(
+          `${primary.kind} provider 调用失败，使用本地教学降级策略`,
+          error instanceof Error ? error.message : error,
+        );
+        return fallback.generate(prompt, schema, context);
+      }
+    },
+  };
 }
 
 function resolveProviderName(): string {
@@ -56,14 +80,11 @@ export function createLLMProvider(): LLMProvider {
         process.env.LLM_BASE_URL?.trim() ||
         (providerName === "deepseek" ? "https://api.deepseek.com/v1" : undefined),
     });
-    return {
-      kind: provider.kind,
-      generate: (prompt, schema, context) =>
-        withLLMTimeout(
-          provider.generate(prompt, schema, context),
-          timeoutMs,
-        ),
-    };
+    return createFallbackProvider(
+      provider,
+      createMockLLMProvider(),
+      timeoutMs,
+    );
   }
 
   throw new Error(`不支持的 LLM_PROVIDER：${providerName}`);

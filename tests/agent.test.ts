@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { z } from "zod";
 
 import { comparativeKnowledge, getSubtopic } from "@/data/knowledge/comparative";
 import {
+  createFallbackProvider,
   createLLMProvider,
   getLLMTimeoutMs,
   withLLMTimeout,
 } from "@/lib/agent/provider";
 import { createMockLLMProvider } from "@/lib/agent/providers/mock";
+import type { LLMProvider } from "@/lib/agent/llm";
 import {
   questionBatchPublicSchema,
   teachingStrategyPublicSchema,
@@ -243,6 +246,21 @@ test("LLM 请求超时会主动结束而不是永久等待", async () => {
     withLLMTimeout(new Promise<never>(() => {}), 10),
     /模型响应超时/,
   );
+});
+
+test("主 LLM 超时时自动使用本地教学降级策略", async () => {
+  const primary: LLMProvider = {
+    kind: "primary",
+    generate: <T>() => new Promise<T>(() => {}),
+  };
+  const fallback: LLMProvider = {
+    kind: "fallback",
+    generate: async <T>() => ({ ok: true }) as T,
+  };
+  const provider = createFallbackProvider(primary, fallback, 10);
+  const schema = z.object({ ok: z.boolean() });
+
+  assert.deepEqual(await provider.generate("prompt", schema), { ok: true });
 });
 
 test("LLM 超时时间可通过环境变量配置", () => {
