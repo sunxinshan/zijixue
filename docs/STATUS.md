@@ -70,10 +70,12 @@ Question
 
 ### 讲解解锁
 
-- Knowledge 卡片提供“解锁详情”入口。
-- 独立讲解路由为 `/pattern/{knowledgeId}/{subtopicId}`。
-- 首次用户完成讲解后才能进入正式练习；直接访问练习 URL 同样会被拦截。
-- 已有练习进度或已完成 Subtopic 的历史用户自动视为已解锁。
+- 每个 Pattern 独立提供“解锁关口 / 查看讲解”入口。
+- 单 Pattern 讲解路由为 `/pattern/{knowledgeId}/{subtopicId}/{patternId}`。
+- 每个 Pattern 独立记录解锁状态。
+- 当前 Subtopic 的所有 Pattern 都解锁后，才显示正式练习入口。
+- 直接访问练习 URL 时同样检查全部 Pattern 是否解锁。
+- 已有对应 Pattern 练习进度或已完成 Subtopic 的历史用户自动视为已解锁。
 
 ## 4. Pattern Coverage
 

@@ -9,6 +9,7 @@ import type {
   LearningSession,
   LearningState,
   LessonCheckProgress,
+  Pattern,
   Question,
   SessionSummary,
   Subtopic,
@@ -393,8 +394,36 @@ export function getSubtopicLearningStates(
   );
 }
 
-function lessonProgressKey(knowledgeId: string, subtopicId: string): string {
-  return `${knowledgeId}:${subtopicId}`;
+function lessonProgressKey(
+  knowledgeId: string,
+  subtopicId: string,
+  patternId?: string,
+): string {
+  return patternId
+    ? `${knowledgeId}:${subtopicId}:${patternId}`
+    : `${knowledgeId}:${subtopicId}`;
+}
+
+export function isPatternLessonUnlocked(
+  storage: AppStorage,
+  knowledgeId: string,
+  subtopic: Subtopic,
+  pattern: Pattern,
+  state?: LearningState,
+): boolean {
+  if (
+    storage.lessonProgress[lessonProgressKey(knowledgeId, subtopic.id)]
+      ?.completed ||
+    storage.lessonProgress[
+      lessonProgressKey(knowledgeId, subtopic.id, pattern.id)
+    ]?.completed
+  ) {
+    return true;
+  }
+  if (state?.completed) return true;
+  return (
+    (state?.patternProgress[pattern.id]?.attemptedQuestions ?? 0) > 0
+  );
 }
 
 export function isSubtopicLessonUnlocked(
@@ -403,13 +432,8 @@ export function isSubtopicLessonUnlocked(
   subtopic: Subtopic,
   state?: LearningState,
 ): boolean {
-  if (storage.lessonProgress[lessonProgressKey(knowledgeId, subtopic.id)]?.completed) {
-    return true;
-  }
-  if (state?.completed) return true;
-  return subtopic.patterns.some(
-    (pattern) =>
-      (state?.patternProgress[pattern.id]?.attemptedQuestions ?? 0) > 0,
+  return subtopic.patterns.every((pattern) =>
+    isPatternLessonUnlocked(storage, knowledgeId, subtopic, pattern, state),
   );
 }
 
@@ -462,12 +486,13 @@ export function saveLessonCheckProgress(input: {
   return next;
 }
 
-export function markSubtopicLessonComplete(
+export function markPatternLessonComplete(
   knowledgeId: string,
   subtopicId: string,
+  patternId: string,
 ): AppStorage {
   const current = loadAgentStorage();
-  const key = lessonProgressKey(knowledgeId, subtopicId);
+  const key = lessonProgressKey(knowledgeId, subtopicId, patternId);
   const next: AppStorage = {
     ...current,
     lessonProgress: {
@@ -475,12 +500,36 @@ export function markSubtopicLessonComplete(
       [key]: {
         knowledgeId,
         subtopicId,
+        patternId,
         completed: true,
         completedAt: Date.now(),
       },
     },
   };
   saveAgentStorage(next);
+  return next;
+}
+
+export function markSubtopicLessonComplete(
+  knowledgeId: string,
+  subtopicId: string,
+): AppStorage {
+  const knowledge = getKnowledge(knowledgeId);
+  const subtopic = knowledge
+    ? getSubtopic(knowledge, subtopicId)
+    : undefined;
+  if (!subtopic) {
+    return loadAgentStorage();
+  }
+
+  let next = loadAgentStorage();
+  for (const pattern of subtopic.patterns) {
+    next = markPatternLessonComplete(
+      knowledgeId,
+      subtopicId,
+      pattern.id,
+    );
+  }
   return next;
 }
 

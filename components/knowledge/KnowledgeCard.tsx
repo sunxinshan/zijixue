@@ -9,17 +9,20 @@ export function KnowledgeCard({
   subtopic,
   index,
   state,
-  lessonUnlocked,
-  lessonHref,
+  patternUnlocks,
+  lessonBaseHref,
   onPronounce,
 }: {
   subtopic: Subtopic;
   index: number;
   state?: LearningState;
-  lessonUnlocked: boolean;
-  lessonHref: string;
+  patternUnlocks: Record<string, boolean>;
+  lessonBaseHref: string;
   onPronounce: (word: string) => void;
 }) {
+  const allPatternsUnlocked = subtopic.patterns.every(
+    (pattern) => patternUnlocks[pattern.id],
+  );
   const coverageComplete =
     state &&
     subtopic.patterns.every(
@@ -99,34 +102,31 @@ export function KnowledgeCard({
                   {example.text}
                 </button>
               ))}
+              <Link
+                href={`${lessonBaseHref}/${pattern.id}`}
+                className={`mt-3 flex min-h-10 items-center justify-center rounded-xl px-3 text-xs font-black ${
+                  patternUnlocks[pattern.id]
+                    ? "bg-[#eaf7e7] text-[#277146]"
+                    : "bg-[#fff5d4] text-[#8a5a00]"
+                }`}
+              >
+                {patternUnlocks[pattern.id]
+                  ? "📖 查看讲解"
+                  : "🔓 解锁关口"}
+              </Link>
             </div>
           );
         })}
       </div>
 
-      {lessonUnlocked ? (
-        <div className="mt-5 grid gap-3 sm:grid-cols-2">
-          <Link
-            href={lessonHref}
-            className="flex min-h-12 items-center justify-center rounded-2xl bg-[#fff5d4] px-5 text-sm font-black text-[#8a5a00] shadow-sm"
-          >
-            📖 查看讲解
-          </Link>
-          <Link
-            href={`/game/comparative/${subtopic.id}`}
-            className="flex min-h-12 items-center justify-center rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-5 text-sm font-black text-white shadow-md"
-          >
-            {state?.completed ? "再次练习" : "开始练习"}
-          </Link>
-        </div>
-      ) : (
+      {allPatternsUnlocked ? (
         <Link
-          href={lessonHref}
-          className="mt-5 flex min-h-12 items-center justify-center rounded-2xl bg-[#fff5d4] px-5 text-sm font-black text-[#8a5a00] shadow-sm"
+          href={`/game/comparative/${subtopic.id}`}
+          className="mt-5 flex min-h-12 items-center justify-center rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-5 text-sm font-black text-white shadow-md"
         >
-          🔓 解锁关口
+          {state?.completed ? "再次练习" : "开始练习"}
         </Link>
-      )}
+      ) : null}
     </article>
   );
 }

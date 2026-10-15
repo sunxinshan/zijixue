@@ -283,6 +283,7 @@ export interface SessionState {
 export interface LessonProgress {
   knowledgeId: string;
   subtopicId: string;
+  patternId?: string;
   completed: boolean;
   completedAt?: number;
 }
