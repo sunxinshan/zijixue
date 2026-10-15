@@ -43,6 +43,19 @@ export function evaluateQuestionAnswer(
   );
 }
 
+export type PostAnswerAction =
+  | "show-feedback"
+  | "next-question"
+  | "finish-batch";
+
+export function getPostAnswerAction(
+  correct: boolean,
+  isLastQuestion: boolean,
+): PostAnswerAction {
+  if (!correct) return "show-feedback";
+  return isLastQuestion ? "finish-batch" : "next-question";
+}
+
 export function getAttemptStats(attempts: Attempt[]) {
   const correct = attempts.filter((attempt) => attempt.correct).length;
   const total = attempts.length;

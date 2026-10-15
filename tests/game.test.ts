@@ -8,6 +8,7 @@ import {
   getAttemptStats,
   getLevelProgress,
   getPatternStats,
+  getPostAnswerAction,
 } from "@/lib/game";
 import type { Question } from "@/types/agent";
 
@@ -28,6 +29,13 @@ const question: Question = {
 test("choice 和 true-false 均由程序本地判断", () => {
   assert.equal(evaluateQuestionAnswer(question, "Happier"), true);
   assert.equal(evaluateQuestionAnswer(question, "happyer"), false);
+});
+
+test("答对自动前进，答错保留反馈", () => {
+  assert.equal(getPostAnswerAction(true, false), "next-question");
+  assert.equal(getPostAnswerAction(true, true), "finish-batch");
+  assert.equal(getPostAnswerAction(false, false), "show-feedback");
+  assert.equal(getPostAnswerAction(false, true), "show-feedback");
 });
 
 test("Attempt、星级和等级进度可计算", () => {

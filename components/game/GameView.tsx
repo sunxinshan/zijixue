@@ -17,6 +17,7 @@ import {
   createLocalId,
   createTimestamp,
   evaluateQuestionAnswer,
+  getPostAnswerAction,
   XP_PER_CORRECT,
 } from "@/lib/game";
 import {
@@ -93,6 +94,7 @@ export function GameView({
   const [pastBatches, setPastBatches] = useState<BatchPerformance[]>([]);
   const [previousQuestions, setPreviousQuestions] = useState<string[]>([]);
   const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const answerLocked = useRef(false);
   const [teachingStage, setTeachingStage] = useState<"intro" | "practice">(
     "practice",
   );
@@ -147,8 +149,17 @@ export function GameView({
   const currentQuestion = currentBatch?.questions[currentIndex];
 
   const handleAnswer = (answer: string | boolean) => {
-    if (!session || !currentQuestion || !currentBatch || feedback) return;
+    if (
+      !session ||
+      !currentQuestion ||
+      !currentBatch ||
+      feedback ||
+      answerLocked.current
+    ) {
+      return;
+    }
 
+    answerLocked.current = true;
     const correct = evaluateQuestionAnswer(currentQuestion, answer);
     const attempt: Attempt = {
       id: createLocalId("attempt"),
@@ -162,9 +173,28 @@ export function GameView({
       correct,
       timestamp: createTimestamp(),
     };
+    const nextAttempts = [...attempts, attempt];
 
     recordAttempt(attempt);
-    setAttempts((current) => [...current, attempt]);
+    setAttempts(nextAttempts);
+
+    const action = getPostAnswerAction(
+      correct,
+      currentIndex === currentBatch.questions.length - 1,
+    );
+    if (action === "finish-batch") {
+      void finishBatch(nextAttempts);
+      return;
+    }
+    if (action === "next-question") {
+      setCurrentIndex((current) => current + 1);
+      setFeedback(null);
+      window.setTimeout(() => {
+        answerLocked.current = false;
+      }, 0);
+      return;
+    }
+
     setFeedback({
       selectedAnswer: formatAnswer(answer),
       correctAnswer: formatAnswer(currentQuestion.answer),
@@ -174,12 +204,12 @@ export function GameView({
     });
   };
 
-  const finishBatch = async () => {
+  async function finishBatch(attemptsForBatch: Attempt[] = attempts) {
     if (
       !session ||
       !learningState ||
       !currentBatch ||
-      attempts.length === 0
+      attemptsForBatch.length === 0
     ) {
       return;
     }
@@ -191,7 +221,7 @@ export function GameView({
       const batchQuestionIds = new Set(
         currentBatch.questions.map((question) => question.id),
       );
-      const batchAttempts = attempts.filter((attempt) =>
+      const batchAttempts = attemptsForBatch.filter((attempt) =>
         batchQuestionIds.has(attempt.questionId),
       );
       const currentPerformance = createBatchPerformance(
@@ -252,6 +282,7 @@ export function GameView({
 
   const handleNext = () => {
     if (!currentBatch || !feedback) return;
+    answerLocked.current = false;
     if (currentIndex < currentBatch.questions.length - 1) {
       setCurrentIndex((current) => current + 1);
       setFeedback(null);
@@ -266,6 +297,7 @@ export function GameView({
     setNextBatch(null);
     setCurrentIndex(0);
     setFeedback(null);
+    answerLocked.current = false;
     setStatus("question");
   };
 
