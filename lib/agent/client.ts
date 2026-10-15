@@ -36,20 +36,44 @@ export class AgentRequestError extends Error {
   }
 }
 
+export async function readAgentJson<T>(response: Response): Promise<T> {
+  const contentType = response.headers.get("content-type")?.toLowerCase() ?? "";
+  let data: (T & { error?: string }) | null = null;
+
+  if (contentType.includes("application/json")) {
+    try {
+      data = (await response.json()) as T & { error?: string };
+    } catch {
+      data = null;
+    }
+  } else {
+    await response.text();
+  }
+
+  if (!response.ok) {
+    const fallback =
+      response.status === 504
+        ? "超级大脑响应超时，请稍后重试"
+        : "超级大脑服务暂时不可用，请稍后重试";
+    throw new AgentRequestError(data?.error ?? fallback, response.status);
+  }
+
+  if (!data) {
+    throw new AgentRequestError(
+      "超级大脑返回了无法识别的数据，请稍后重试",
+      response.status,
+    );
+  }
+  return data;
+}
+
 async function postJson<T>(url: string, body: unknown): Promise<T> {
   const response = await fetch(url, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
-  const data = (await response.json()) as T & { error?: string };
-  if (!response.ok) {
-    throw new AgentRequestError(
-      data.error ?? "超级大脑服务暂时不可用",
-      response.status,
-    );
-  }
-  return data;
+  return readAgentJson<T>(response);
 }
 
 export function startAgentSession(input: {
