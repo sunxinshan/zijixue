@@ -8,6 +8,7 @@ import type {
   Difficulty,
   LearningSession,
   LearningState,
+  LessonCheckProgress,
   Question,
   SessionSummary,
   Subtopic,
@@ -96,6 +97,7 @@ export function createInitialAgentStorage(): AppStorage {
     attempts: [],
     questions: [],
     lessonProgress: {},
+    lessonCheckProgress: {},
   };
 }
 
@@ -272,6 +274,11 @@ function parseAgentStorage(raw: string | null): AppStorage {
         parsed.lessonProgress && typeof parsed.lessonProgress === "object"
           ? parsed.lessonProgress
           : {},
+      lessonCheckProgress:
+        parsed.lessonCheckProgress &&
+        typeof parsed.lessonCheckProgress === "object"
+          ? parsed.lessonCheckProgress
+          : {},
       legacyXp: parsed.legacyXp,
       legacyStars: parsed.legacyStars,
     };
@@ -404,6 +411,55 @@ export function isSubtopicLessonUnlocked(
     (pattern) =>
       (state?.patternProgress[pattern.id]?.attemptedQuestions ?? 0) > 0,
   );
+}
+
+function lessonCheckProgressKey(
+  knowledgeId: string,
+  subtopicId: string,
+  patternId: string,
+): string {
+  return `${knowledgeId}:${subtopicId}:${patternId}`;
+}
+
+export function getLessonCheckProgressBySubtopic(
+  storage: AppStorage,
+  knowledgeId: string,
+  subtopicId: string,
+): Record<string, LessonCheckProgress> {
+  return Object.fromEntries(
+    Object.entries(storage.lessonCheckProgress).filter(
+      ([, progress]) =>
+        progress.knowledgeId === knowledgeId &&
+        progress.subtopicId === subtopicId,
+    ).map(([, progress]) => [progress.patternId, progress]),
+  );
+}
+
+export function saveLessonCheckProgress(input: {
+  knowledgeId: string;
+  subtopicId: string;
+  patternId: string;
+  answers: Record<string, string | boolean>;
+  passed: boolean;
+}): AppStorage {
+  const current = loadAgentStorage();
+  const key = lessonCheckProgressKey(
+    input.knowledgeId,
+    input.subtopicId,
+    input.patternId,
+  );
+  const next: AppStorage = {
+    ...current,
+    lessonCheckProgress: {
+      ...current.lessonCheckProgress,
+      [key]: {
+        ...input,
+        updatedAt: Date.now(),
+      },
+    },
+  };
+  saveAgentStorage(next);
+  return next;
 }
 
 export function markSubtopicLessonComplete(

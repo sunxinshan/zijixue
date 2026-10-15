@@ -10,19 +10,27 @@ import {
   getInitialTeachingMode,
   getPublishedComicPanels,
 } from "@/lib/pattern-lesson";
-import type { Subtopic, TeachingMode } from "@/types/agent";
+import type {
+  LessonCheckProgress,
+  Subtopic,
+  TeachingMode,
+} from "@/types/agent";
 
 export function PatternLesson({
   knowledgeId,
   subtopic,
   initialPatternId,
   completeLabel = "开始练习",
+  initialCheckProgress = {},
+  onCheckProgressChange,
   onComplete,
 }: {
   knowledgeId: string;
   subtopic: Subtopic;
   initialPatternId?: string;
   completeLabel?: string;
+  initialCheckProgress?: Record<string, LessonCheckProgress>;
+  onCheckProgressChange?: (progress: LessonCheckProgress) => void;
   onComplete: () => void;
 }) {
   const [patternIndex, setPatternIndex] = useState(() => {
@@ -33,7 +41,6 @@ export function PatternLesson({
   });
   const [modeOverride, setModeOverride] = useState<TeachingMode | null>(null);
   const [comicFailed, setComicFailed] = useState(false);
-  const [checksPassed, setChecksPassed] = useState(false);
 
   const pattern = subtopic.patterns[patternIndex];
   const content = pattern.teachingContent;
@@ -43,7 +50,8 @@ export function PatternLesson({
     ? modeOverride ?? getInitialTeachingMode(content)
     : "text";
   const hasUnderstandingCheck = Boolean(content.understandingCheck?.length);
-  const canContinue = !hasUnderstandingCheck || checksPassed;
+  const currentCheckProgress = initialCheckProgress[pattern.id];
+  const canContinue = !hasUnderstandingCheck || currentCheckProgress?.passed === true;
 
   const handleComicError = () => {
     setComicFailed(true);
@@ -53,7 +61,6 @@ export function PatternLesson({
     if (!canContinue) return;
     if (patternIndex < subtopic.patterns.length - 1) {
       setComicFailed(false);
-      setChecksPassed(false);
       setPatternIndex((current) => current + 1);
       return;
     }
@@ -140,9 +147,19 @@ export function PatternLesson({
         {content.understandingCheck?.length ? (
           <div className="mt-5">
             <UnderstandingCheck
-              key={pattern.id}
+              key={`${pattern.id}:${JSON.stringify(currentCheckProgress?.answers ?? {})}`}
               questions={content.understandingCheck}
-              onPassedChange={setChecksPassed}
+              initialAnswers={currentCheckProgress?.answers}
+              onAnswersChange={(answers, passed) => {
+                onCheckProgressChange?.({
+                  knowledgeId,
+                  subtopicId: subtopic.id,
+                  patternId: pattern.id,
+                  answers,
+                  passed,
+                  updatedAt: Date.now(),
+                });
+              }}
             />
           </div>
         ) : null}
@@ -153,7 +170,6 @@ export function PatternLesson({
             disabled={patternIndex === 0}
             onClick={() => {
               setComicFailed(false);
-              setChecksPassed(false);
               setPatternIndex((current) => current - 1);
             }}
             className="min-h-14 rounded-2xl bg-[#f4f7ef] px-5 font-black text-[#315341] disabled:opacity-35"

@@ -9,6 +9,7 @@ import { createInitialLearningState } from "@/lib/mastery";
 import {
   createInitialAgentStorage,
   expandLegacyLearningState,
+  getLessonCheckProgressBySubtopic,
   isSubtopicLessonUnlocked,
   mergeLearningState,
   migrateLegacyStorage,
@@ -20,12 +21,39 @@ test("v2 Storage 使用 LearningState、Session、Attempt、Question 和 LessonP
   assert.deepEqual(Object.keys(storage).sort(), [
     "attempts",
     "learningStates",
+    "lessonCheckProgress",
     "lessonProgress",
     "questions",
     "sessions",
     "userId",
     "version",
   ]);
+});
+
+test("理解检查答案可按 Pattern 从存储中恢复", () => {
+  const storage = createInitialAgentStorage();
+  const withCheck = {
+    ...storage,
+    lessonCheckProgress: {
+      "comparative:comparative-basic:comparative-than": {
+        knowledgeId: "comparative",
+        subtopicId: "comparative-basic",
+        patternId: "comparative-than",
+        answers: { "comparative-than-who": "I" },
+        passed: false,
+        updatedAt: 1,
+      },
+    },
+  };
+
+  assert.deepEqual(
+    getLessonCheckProgressBySubtopic(
+      withCheck,
+      "comparative",
+      "comparative-basic",
+    )["comparative-than"].answers,
+    { "comparative-than-who": "I" },
+  );
 });
 
 test("新 Subtopic 默认锁定讲解，完成讲解或已有练习进度后解锁", () => {

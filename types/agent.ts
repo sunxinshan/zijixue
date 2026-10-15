@@ -287,6 +287,15 @@ export interface LessonProgress {
   completedAt?: number;
 }
 
+export interface LessonCheckProgress {
+  knowledgeId: string;
+  subtopicId: string;
+  patternId: string;
+  answers: Record<string, string | boolean>;
+  passed: boolean;
+  updatedAt: number;
+}
+
 export interface AppStorage {
   version: 2;
   userId: string;
@@ -295,6 +304,7 @@ export interface AppStorage {
   attempts: Attempt[];
   questions: Question[];
   lessonProgress: Record<string, LessonProgress>;
+  lessonCheckProgress: Record<string, LessonCheckProgress>;
   legacyXp?: number;
   legacyStars?: number;
 }

@@ -39,6 +39,18 @@ test("普通比较级的所有 Pattern 都接入已发布漫画", () => {
   }
 });
 
+test("漫画旁白使用中文", () => {
+  const subtopic = getSubtopic(comparativeKnowledge, "comparative-basic");
+  assert.ok(subtopic);
+
+  for (const pattern of subtopic.patterns) {
+    for (const panel of getPublishedComicPanels(pattern.teachingContent)) {
+      assert.ok(panel.narration, `${pattern.id} panel narration missing`);
+      assert.match(panel.narration, /[\u4e00-\u9fff]/);
+    }
+  }
+});
+
 test("没有已发布漫画时默认使用文字讲解", () => {
   const content: TeachingContent = {
     concept: "测试概念",

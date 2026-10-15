@@ -11,25 +11,59 @@ interface CheckFeedback {
   explanation: string;
 }
 
+function buildInitialFeedback(
+  questions: UnderstandingCheckQuestion[],
+  answers: Record<string, string | boolean>,
+): Record<string, CheckFeedback> {
+  return Object.fromEntries(
+    questions.flatMap((question) => {
+      const answer = answers[question.id];
+      if (answer === undefined) return [];
+      return [
+        [
+          question.id,
+          {
+            correct: evaluateUnderstandingAnswer(question, answer),
+            explanation: question.explanation,
+          },
+        ],
+      ];
+    }),
+  );
+}
+
 export function UnderstandingCheck({
   questions,
+  initialAnswers = {},
   onPassedChange,
+  onAnswersChange,
 }: {
   questions: UnderstandingCheckQuestion[];
-  onPassedChange: (passed: boolean) => void;
+  initialAnswers?: Record<string, string | boolean>;
+  onPassedChange?: (passed: boolean) => void;
+  onAnswersChange?: (
+    answers: Record<string, string | boolean>,
+    passed: boolean,
+  ) => void;
 }) {
   const [selected, setSelected] = useState<
     Record<string, string | boolean>
-  >({});
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  >(() => initialAnswers);
+  const [drafts, setDrafts] = useState<Record<string, string>>(() =>
+    Object.fromEntries(
+      Object.entries(initialAnswers)
+        .filter(([, answer]) => typeof answer === "string")
+        .map(([id, answer]) => [id, String(answer)]),
+    ),
+  );
   const [feedback, setFeedback] = useState<Record<string, CheckFeedback>>(
-    {},
+    () => buildInitialFeedback(questions, initialAnswers),
   );
 
   const passed = questions.every((question) => feedback[question.id]?.correct);
 
   useEffect(() => {
-    onPassedChange(questions.length === 0 ? true : passed);
+    onPassedChange?.(questions.length === 0 ? true : passed);
   }, [onPassedChange, passed, questions.length]);
 
   const check = (
@@ -37,14 +71,21 @@ export function UnderstandingCheck({
     answer: string | boolean,
   ) => {
     const correct = evaluateUnderstandingAnswer(question, answer);
-    setSelected((current) => ({ ...current, [question.id]: answer }));
-    setFeedback((current) => ({
-      ...current,
+    const nextSelected = { ...selected, [question.id]: answer };
+    const nextFeedback = {
+      ...feedback,
       [question.id]: {
         correct,
         explanation: question.explanation,
       },
-    }));
+    };
+    const nextPassed = questions.every(
+      (item) => nextFeedback[item.id]?.correct === true,
+    );
+
+    setSelected(nextSelected);
+    setFeedback(nextFeedback);
+    onAnswersChange?.(nextSelected, nextPassed);
   };
 
   const answerState = (

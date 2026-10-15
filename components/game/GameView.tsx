@@ -23,11 +23,13 @@ import {
 } from "@/lib/game";
 import {
   completeSession,
+  getLessonCheckProgressBySubtopic,
   getSubtopicLearningState,
   getSubtopicLearningStates,
   isSubtopicLessonUnlocked,
   loadAgentStorage,
   recordAttempt,
+  saveLessonCheckProgress,
   saveQuestions,
   upsertSession,
 } from "@/lib/storage";
@@ -533,6 +535,12 @@ export function GameView({
           knowledgeId={knowledge.id}
           subtopic={subtopic}
           initialPatternId={teachingEntryPatternId}
+          initialCheckProgress={getLessonCheckProgressBySubtopic(
+            storageState,
+            knowledge.id,
+            subtopic.id,
+          )}
+          onCheckProgressChange={saveLessonCheckProgress}
           onComplete={() => {
             setTeachingEntryPatternId(undefined);
             setTeachingStage("practice");

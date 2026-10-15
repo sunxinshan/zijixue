@@ -26,7 +26,7 @@ export const comparativeFormComic = publishedComic(
       imageUrl: "/comic/01-lesson082-p1.png",
       purpose: "通过高矮和快慢的对比理解比较级 -er。",
       sceneDescription: "Tom 和 Ken 在校园里比较身高与跑步速度。",
-      narration: "Short words often add -er to show a comparison.",
+      narration: "短形容词或副词通常加 -er，表示两者之间的比较。",
       dialogue: [
         {
           characterId: "tom",
@@ -60,7 +60,7 @@ export const comparativeThanComic = publishedComic(
       imageUrl: "/comic/02-lesson082-p2.png",
       purpose: "理解 than 用来引出比较对象。",
       sceneDescription: "Misa 和 Tom 在操场上赛跑，Misa 跑得更快。",
-      narration: "than Misa tells us who the speaker is compared with.",
+      narration: "than Misa 用来说明是和谁比较。",
       dialogue: [
         {
           characterId: "misa",
@@ -87,7 +87,7 @@ export const comparativeBeComic = publishedComic(
       imageUrl: "/comic/03-comparative-be-p1.png",
       purpose: "掌握 A + be + 比较级 + than + B。",
       sceneDescription: "Tom 和 Ken 站在身高墙前比较身高。",
-      narration: "Use be before the comparative in this sentence pattern.",
+      narration: "be 动词要放在比较级前面。",
       dialogue: [
         {
           characterId: "tom",
@@ -106,7 +106,7 @@ export const comparativeBeComic = publishedComic(
       imageUrl: "/comic/04-comparative-be-p2.png",
       purpose: "在 be 动词句中识别比较对象。",
       sceneDescription: "两个孩子在公园里比较各自的狗。",
-      narration: "The comparison still uses than to introduce the other object.",
+      narration: "比较对象仍然放在 than 后面。",
       dialogue: [
         {
           characterId: "amy",
@@ -132,7 +132,7 @@ export const comparativeActionComic = publishedComic(
       imageUrl: "/comic/05-comparative-action-p1.png",
       purpose: "理解行为动词后可接比较级，例如 run faster。",
       sceneDescription: "Misa 和 Tom 赛跑，Misa 跑得更快。",
-      narration: "The comparative can follow an action verb.",
+      narration: "行为动词后面可以接比较级，例如 run faster。",
       dialogue: [
         {
           characterId: "misa",
@@ -151,7 +151,7 @@ export const comparativeActionComic = publishedComic(
       imageUrl: "/comic/06-comparative-action-p2.png",
       purpose: "理解 well 的比较级是 better，并放在行为动词后。",
       sceneDescription: "两个孩子在音乐教室里比较唱歌表现。",
-      narration: "well becomes better, and better follows the action verb sing.",
+      narration: "well 的比较级是 better，放在行为动词 sing 后面。",
       dialogue: [
         {
           characterId: "lily",
@@ -177,7 +177,7 @@ export const whichComparativeComic = publishedComic(
       imageUrl: "/comic/07-which-comparative-p1.png",
       purpose: "理解 Which is + 比较级, A or B? 的提问结构。",
       sceneDescription: "孩子们在日历前比较四月和五月。",
-      narration: "Use Which when asking about one of two objects.",
+      narration: "Which 用来询问两个对象中的一个。",
       dialogue: [
         {
           characterId: "ben",
@@ -196,7 +196,7 @@ export const whichComparativeComic = publishedComic(
       imageUrl: "/comic/08-which-comparative-p2.png",
       purpose: "使用 or 连接两个比较对象，并给出选择。",
       sceneDescription: "孩子指着两个人询问谁更高。",
-      narration: "The two choices are connected with or.",
+      narration: "两个选择用 or 连接。",
       dialogue: [
         {
           characterId: "amy",

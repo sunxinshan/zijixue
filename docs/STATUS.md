@@ -64,8 +64,9 @@ Question
 - 01 → 比较级词形；02 → `than`；03/04 → `be`；05/06 → 行为动词；07/08 → `Which`。
 - 有已发布漫画时默认展示漫画模式，可切换文字讲解。
 - 无漫画或图片加载失败时自动回退文字讲解。
-- 漫画对话和旁白由前端文本渲染，不依赖图片中的文字。
-- 理解检查仅保存在页面状态中，不写入 Attempt，也不直接改变 Coverage 或 Mastery。
+- 漫画旁白使用中文，英文对话仍由前端文本渲染，不依赖图片中的文字。
+- 理解检查答案按 Pattern 持久化，翻页或重新进入讲解页不会重置。
+- 理解检查不写入 Attempt，也不直接改变 Coverage 或 Mastery。
 
 ### 讲解解锁
 
@@ -161,7 +162,7 @@ LLM_BASE_URL=https://api.deepseek.com/v1
 
 - ESLint
 - TypeScript
-- 46 项自动化测试
+- 48 项自动化测试
 - Next.js production build
 - 真实 DeepSeek 生成与 Batch 分析
 
