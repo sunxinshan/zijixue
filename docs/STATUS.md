@@ -53,8 +53,18 @@ Question
 - commonMistakes
 - guidedExamples
 - practiceHints
+- comic（可选）
+- understandingCheck（可选）
 
 首次进入 Subtopic 时，UI 会按 Pattern 分步展示 TeachingContent，然后进入练习。
+
+### Pattern 漫画教学
+
+- `comparative-than` 已接入两张本地已发布漫画。
+- 有已发布漫画时默认展示漫画模式，可切换文字讲解。
+- 无漫画或图片加载失败时自动回退文字讲解。
+- 漫画对话和旁白由前端文本渲染，不依赖图片中的文字。
+- 理解检查仅保存在页面状态中，不写入 Attempt，也不直接改变 Coverage 或 Mastery。
 
 ## 4. Pattern Coverage
 
@@ -143,7 +153,7 @@ LLM_BASE_URL=https://api.deepseek.com/v1
 
 - ESLint
 - TypeScript
-- 33 项自动化测试
+- 45 项自动化测试
 - Next.js production build
 - 真实 DeepSeek 生成与 Batch 分析
 
@@ -151,13 +161,14 @@ LLM_BASE_URL=https://api.deepseek.com/v1
 
 - active Session 刷新恢复尚未实现。
 - PatternProgress 使用 LocalStorage，未跨设备同步。
-- TeachingContent 当前主要通过首次教学页展示。
+- TeachingContent 当前主要通过首次教学页展示，目前只有 `comparative-than` 接入正式漫画。
 - Challenge UI 仍是基础验收版本。
 
 ## 11. 下一步
 
 1. 完成 6 个 Subtopic 的端到端人工体验。
-2. 增加 TeachingContent 的语音播放和逐段教学展示。
-3. 增加真实模型题目质量 eval。
-4. 增加 active Session 恢复。
-5. 验证后部署到生产环境。
+2. 按统一脚本模板扩展其他 Pattern 的正式漫画素材。
+3. 增加 TeachingContent 的语音播放和逐段教学展示。
+4. 增加真实模型题目质量 eval。
+5. 增加 active Session 恢复。
+6. 验证后部署到生产环境。

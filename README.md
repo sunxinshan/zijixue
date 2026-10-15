@@ -31,6 +31,8 @@ Knowledge
 - Agent 负责诊断、Pattern 选择、题量分配、解释和难度调整。
 - 程序负责边界、Coverage、Attempt、Validator 和持久化。
 - 首次学习先展示 TeachingContent，再进入练习。
+- `comparative-than` 默认展示本地漫画讲解，可切换文字讲解。
+- 图片缺失或加载失败时自动回退文字讲解。
 - 已有学习记录时针对弱 Pattern 少量强化。
 
 ## QuestionPool

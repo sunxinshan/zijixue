@@ -1,3 +1,7 @@
+import {
+  comparativeThanComic,
+  comparativeThanUnderstandingCheck,
+} from "@/data/lessons/comparative-than";
 import type {
   Knowledge,
   Pattern,
@@ -97,6 +101,8 @@ const comparativeSubtopic: Subtopic = {
         ],
         usage: ["than 后面跟比较对象。", "比较对象可以是人名、代词或名词。"],
         commonMistakes: ["忘记写 than。", "把 than 后面的比较对象放错。"],
+        comic: comparativeThanComic,
+        understandingCheck: comparativeThanUnderstandingCheck,
       }),
       examples: [
         sentence("tom-ken", "Tom is taller than Ken."),

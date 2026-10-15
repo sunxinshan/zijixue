@@ -30,6 +30,52 @@ export interface TeachingExample {
   analysis?: string;
 }
 
+export type TeachingMode = "comic" | "text";
+export type ComicStatus = "draft" | "reviewed" | "published";
+
+export interface ComicDialogue {
+  characterId: string;
+  characterName: string;
+  text: string;
+  translation?: string;
+  emotion?: string;
+}
+
+export interface ComicPanel {
+  id: string;
+  order: number;
+  imageUrl: string;
+  purpose: string;
+  sceneDescription: string;
+  narration?: string;
+  dialogue: ComicDialogue[];
+  focusText?: string[];
+  teacherNote?: string;
+  altText: string;
+}
+
+export interface ComicLesson {
+  id: string;
+  status: ComicStatus;
+  panels: ComicPanel[];
+  styleId?: string;
+  altText: string;
+}
+
+export type UnderstandingCheckType =
+  | "choice"
+  | "true_false"
+  | "fill_blank";
+
+export interface UnderstandingCheckQuestion {
+  id: string;
+  type: UnderstandingCheckType;
+  prompt: string;
+  options?: string[];
+  answer: string | boolean;
+  explanation: string;
+}
+
 export interface TeachingContent {
   concept: string;
   why?: string;
@@ -41,6 +87,8 @@ export interface TeachingContent {
   commonMistakes?: string[];
   guidedExamples?: string[];
   practiceHints?: string[];
+  comic?: ComicLesson;
+  understandingCheck?: UnderstandingCheckQuestion[];
 }
 
 export interface PatternExample {

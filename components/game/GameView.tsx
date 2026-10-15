@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react";
 import { AnswerButton } from "@/components/game/AnswerButton";
 import { ForestBackdrop } from "@/components/shared/ForestBackdrop";
 import { ProgressBar } from "@/components/shared/ProgressBar";
+import { PatternLesson } from "@/components/pattern-lesson/PatternLesson";
 import { createBatchPerformance } from "@/lib/agent/analysis";
 import {
   AgentRequestError,
@@ -98,7 +99,9 @@ export function GameView({
   const [teachingStage, setTeachingStage] = useState<"intro" | "practice">(
     "practice",
   );
-  const [teachingPatternIndex, setTeachingPatternIndex] = useState(0);
+  const [teachingEntryPatternId, setTeachingEntryPatternId] = useState<
+    string | undefined
+  >();
 
   useEffect(() => {
     if (initialized.current) return;
@@ -482,118 +485,17 @@ export function GameView({
     subtopic &&
     subtopic.patterns.length > 0
   ) {
-    const pattern = subtopic.patterns[teachingPatternIndex];
-    const content = pattern.teachingContent;
-
     return (
       <ForestBackdrop compact>
-        <main className="mx-auto max-w-2xl pb-8">
-          <div className="flex items-center justify-between">
-            <Link
-              href={`/knowledge/${knowledge.id}`}
-              className="rounded-2xl bg-white/85 px-4 py-3 text-sm font-black text-[#315341] shadow-sm"
-            >
-              ← 返回
-            </Link>
-            <span className="rounded-2xl bg-white/85 px-4 py-3 text-sm font-black text-[#60786a]">
-              {teachingPatternIndex + 1}/{subtopic.patterns.length}
-            </span>
-          </div>
-
-          <section className="mt-5 rounded-[2rem] bg-white/95 p-6 shadow-[0_20px_55px_rgba(47,108,66,0.14)] sm:p-8">
-            <p className="text-xs font-black tracking-wide text-[#2c8a56]">
-              {subtopic.name}
-            </p>
-            <h1 className="mt-2 text-3xl font-black text-[#173f2a]">
-              {pattern.name}
-            </h1>
-            <p className="mt-4 text-base font-semibold leading-7 text-[#315341]">
-              {content.concept}
-            </p>
-            {content.why ? (
-              <p className="mt-3 rounded-2xl bg-[#f8fbf5] p-4 text-sm font-semibold leading-6 text-[#60786a]">
-                {content.why}
-              </p>
-            ) : null}
-            {content.rule ? (
-              <div className="mt-4 rounded-2xl bg-[#effbf0] p-4">
-                <p className="text-xs font-black text-[#2c8a56]">规则</p>
-                <p className="mt-1 text-sm font-bold text-[#315341]">{content.rule}</p>
-              </div>
-            ) : null}
-            {content.structure ? (
-              <p className="mt-4 rounded-2xl bg-[#fff8df] p-4 text-sm font-black text-[#8a5a00]">
-                结构：{content.structure}
-              </p>
-            ) : null}
-
-            <div className="mt-5 space-y-3">
-              {content.examples.map((example) => (
-                <div key={example.sentence} className="rounded-2xl bg-[#f8fbf5] p-4">
-                  <p className="font-black text-[#214d32]">{example.sentence}</p>
-                  {example.translation ? (
-                    <p className="mt-1 text-sm font-semibold text-[#60786a]">
-                      {example.translation}
-                    </p>
-                  ) : null}
-                  {example.analysis ? (
-                    <p className="mt-1 text-xs font-semibold text-[#8a5a00]">
-                      {example.analysis}
-                    </p>
-                  ) : null}
-                </div>
-              ))}
-            </div>
-
-            {content.usage?.length ? (
-              <div className="mt-4">
-                <p className="text-xs font-black text-[#60786a]">用法</p>
-                <ul className="mt-2 space-y-1 text-sm font-semibold text-[#315341]">
-                  {content.usage.map((item) => (
-                    <li key={item}>• {item}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            {content.commonMistakes?.length ? (
-              <div className="mt-4 rounded-2xl bg-[#fff5f3] p-4">
-                <p className="text-xs font-black text-[#a33d36]">注意</p>
-                <ul className="mt-2 space-y-1 text-sm font-semibold text-[#8f4a44]">
-                  {content.commonMistakes.map((item) => (
-                    <li key={item}>• {item}</li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-
-            <div className="mt-6 grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                disabled={teachingPatternIndex === 0}
-                onClick={() => setTeachingPatternIndex((index) => index - 1)}
-                className="min-h-14 rounded-2xl bg-[#f4f7ef] px-5 font-black text-[#315341] disabled:opacity-35"
-              >
-                上一步
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (teachingPatternIndex < subtopic.patterns.length - 1) {
-                    setTeachingPatternIndex((index) => index + 1);
-                  } else {
-                    setTeachingStage("practice");
-                  }
-                }}
-                className="min-h-14 rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-5 font-black text-white shadow-lg"
-              >
-                {teachingPatternIndex < subtopic.patterns.length - 1
-                  ? "继续学习"
-                  : "开始练习"}
-              </button>
-            </div>
-          </section>
-        </main>
+        <PatternLesson
+          knowledgeId={knowledge.id}
+          subtopic={subtopic}
+          initialPatternId={teachingEntryPatternId}
+          onComplete={() => {
+            setTeachingEntryPatternId(undefined);
+            setTeachingStage("practice");
+          }}
+        />
       </ForestBackdrop>
     );
   }
@@ -606,13 +508,27 @@ export function GameView({
 
   return (
     <ForestBackdrop compact>
-      <header className="flex items-center justify-between gap-3">
-        <Link
-          href={`/knowledge/${knowledge.id}`}
-          className="inline-flex min-h-11 items-center rounded-2xl bg-white/85 px-4 text-sm font-black text-[#315341] shadow-sm"
-        >
-          ← 规则
-        </Link>
+      <header className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <Link
+            href={`/knowledge/${knowledge.id}`}
+            className="inline-flex min-h-11 items-center rounded-2xl bg-white/85 px-4 text-sm font-black text-[#315341] shadow-sm"
+          >
+            ← 规则
+          </Link>
+          {mode === "subtopic" && subtopic ? (
+            <button
+              type="button"
+              onClick={() => {
+                setTeachingEntryPatternId(currentQuestion.patternId);
+                setTeachingStage("intro");
+              }}
+              className="min-h-11 rounded-2xl bg-[#fff5d4] px-4 text-sm font-black text-[#8a5a00] shadow-sm"
+            >
+              📖 看讲解
+            </button>
+          ) : null}
+        </div>
         <div className="flex items-center gap-2 rounded-2xl bg-white/85 px-4 py-2 shadow-sm">
           <span className="font-black text-[#315341]">
             第 {batchNumber} 批 · {currentIndex + 1}/{currentBatch.questions.length}
