@@ -10,6 +10,7 @@ import { getMasteryMeta } from "@/lib/mastery";
 import {
   getSubtopicLearningStates,
   isChallengeUnlocked,
+  isSubtopicLessonUnlocked,
 } from "@/lib/storage";
 import { useAppStorage } from "@/lib/use-app-storage";
 import type { Knowledge } from "@/types/agent";
@@ -78,15 +79,27 @@ export function KnowledgeView({ knowledge }: { knowledge: Knowledge }) {
         </section>
 
         <section className="mt-6 grid gap-4 lg:grid-cols-2">
-          {knowledge.subtopics.map((subtopic, index) => (
-            <KnowledgeCard
-              key={subtopic.id}
-              subtopic={subtopic}
-              index={index}
-              state={subtopicStates.find((state) => state.subtopicId === subtopic.id)}
-              onPronounce={speak}
-            />
-          ))}
+          {knowledge.subtopics.map((subtopic, index) => {
+            const state = subtopicStates.find(
+              (item) => item.subtopicId === subtopic.id,
+            );
+            return (
+              <KnowledgeCard
+                key={subtopic.id}
+                subtopic={subtopic}
+                index={index}
+                state={state}
+                lessonUnlocked={isSubtopicLessonUnlocked(
+                  storage,
+                  knowledge.id,
+                  subtopic,
+                  state,
+                )}
+                lessonHref={`/pattern/${knowledge.id}/${subtopic.id}`}
+                onPronounce={speak}
+              />
+            );
+          })}
         </section>
 
         <section className="mt-6 rounded-[2rem] bg-white/92 p-6 shadow-sm ring-1 ring-white">

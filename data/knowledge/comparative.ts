@@ -1,7 +1,11 @@
 import {
+  comparativeActionComic,
+  comparativeBeComic,
+  comparativeFormComic,
   comparativeThanComic,
   comparativeThanUnderstandingCheck,
-} from "@/data/lessons/comparative-than";
+  whichComparativeComic,
+} from "@/data/lessons/comparative-basic";
 import type {
   Knowledge,
   Pattern,
@@ -75,6 +79,7 @@ const comparativeSubtopic: Subtopic = {
         contrasts: ["tall = 高；taller = 更高"],
         commonMistakes: ["把 tall 和 taller 当成互不相关的单词。", "描述两个对象时仍然使用原级。"],
         practiceHints: ["先判断是不是两个对象在比较，再选择比较级。"],
+        comic: comparativeFormComic,
       }),
       explanations: ["比较级表示两个对象中“更……”。", "短形容词和副词通常加 -er。"],
       examples: [
@@ -125,6 +130,7 @@ const comparativeSubtopic: Subtopic = {
           teachingExample("My dog is bigger than yours.", "我的狗比你的狗大。", "bigger 是 big 的比较级。"),
         ],
         commonMistakes: ["把 is 和比较级顺序写错。", "忘记 than。"],
+        comic: comparativeBeComic,
       }),
       examples: [
         sentence("tom-taller", "Tom is taller than Ken."),
@@ -147,6 +153,7 @@ const comparativeSubtopic: Subtopic = {
           teachingExample("She sings better than Tom.", "她唱得比 Tom 好。", "better 是 well 的比较级。"),
         ],
         usage: ["run faster", "sing better", "表示动作的程度。"],
+        comic: comparativeActionComic,
       }),
       examples: [
         sentence("run-faster", "I run faster than Misa."),
@@ -168,6 +175,7 @@ const comparativeSubtopic: Subtopic = {
           teachingExample("Which is longer, April or May?", "四月和五月，哪个更长？", "Which 表示哪一个，or 连接两个对象。"),
         ],
         usage: ["Which = 哪一个", "A or B 是两个比较对象。"],
+        comic: whichComparativeComic,
       }),
       examples: [sentence("april-may", "Which is longer, April or May?")],
     },

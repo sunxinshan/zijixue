@@ -60,11 +60,19 @@ Question
 
 ### Pattern 漫画教学
 
-- `comparative-than` 已接入两张本地已发布漫画。
+- 普通比较级的 5 个 Pattern 已全部接入本地已发布漫画。
+- 01 → 比较级词形；02 → `than`；03/04 → `be`；05/06 → 行为动词；07/08 → `Which`。
 - 有已发布漫画时默认展示漫画模式，可切换文字讲解。
 - 无漫画或图片加载失败时自动回退文字讲解。
 - 漫画对话和旁白由前端文本渲染，不依赖图片中的文字。
 - 理解检查仅保存在页面状态中，不写入 Attempt，也不直接改变 Coverage 或 Mastery。
+
+### 讲解解锁
+
+- Knowledge 卡片提供“解锁详情”入口。
+- 独立讲解路由为 `/pattern/{knowledgeId}/{subtopicId}`。
+- 首次用户完成讲解后才能进入正式练习；直接访问练习 URL 同样会被拦截。
+- 已有练习进度或已完成 Subtopic 的历史用户自动视为已解锁。
 
 ## 4. Pattern Coverage
 
@@ -153,7 +161,7 @@ LLM_BASE_URL=https://api.deepseek.com/v1
 
 - ESLint
 - TypeScript
-- 45 项自动化测试
+- 46 项自动化测试
 - Next.js production build
 - 真实 DeepSeek 生成与 Batch 分析
 
@@ -161,7 +169,7 @@ LLM_BASE_URL=https://api.deepseek.com/v1
 
 - active Session 刷新恢复尚未实现。
 - PatternProgress 使用 LocalStorage，未跨设备同步。
-- TeachingContent 当前主要通过首次教学页展示，目前只有 `comparative-than` 接入正式漫画。
+- 当前只有普通比较级接入正式漫画，其余 Subtopic 使用文字讲解。
 - Challenge UI 仍是基础验收版本。
 
 ## 11. 下一步

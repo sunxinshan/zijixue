@@ -280,6 +280,13 @@ export interface SessionState {
   sessionSummary?: SessionSummary;
 }
 
+export interface LessonProgress {
+  knowledgeId: string;
+  subtopicId: string;
+  completed: boolean;
+  completedAt?: number;
+}
+
 export interface AppStorage {
   version: 2;
   userId: string;
@@ -287,6 +294,7 @@ export interface AppStorage {
   sessions: LearningSession[];
   attempts: Attempt[];
   questions: Question[];
+  lessonProgress: Record<string, LessonProgress>;
   legacyXp?: number;
   legacyStars?: number;
 }

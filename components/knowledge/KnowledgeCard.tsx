@@ -9,11 +9,15 @@ export function KnowledgeCard({
   subtopic,
   index,
   state,
+  lessonUnlocked,
+  lessonHref,
   onPronounce,
 }: {
   subtopic: Subtopic;
   index: number;
   state?: LearningState;
+  lessonUnlocked: boolean;
+  lessonHref: string;
   onPronounce: (word: string) => void;
 }) {
   const coverageComplete =
@@ -100,12 +104,26 @@ export function KnowledgeCard({
         })}
       </div>
 
-      <Link
-        href={`/game/comparative/${subtopic.id}`}
-        className="mt-5 flex min-h-12 items-center justify-center rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-5 text-sm font-black text-white shadow-md"
-      >
-        {state?.completed ? "再次练习" : "进入 Subtopic"}
-      </Link>
+      <div className="mt-5 grid gap-3 sm:grid-cols-2">
+        <Link
+          href={lessonHref}
+          className="flex min-h-12 items-center justify-center rounded-2xl bg-[#fff5d4] px-5 text-sm font-black text-[#8a5a00] shadow-sm"
+        >
+          {lessonUnlocked ? "📖 查看讲解" : "🔓 解锁详情"}
+        </Link>
+        {lessonUnlocked ? (
+          <Link
+            href={`/game/comparative/${subtopic.id}`}
+            className="flex min-h-12 items-center justify-center rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-5 text-sm font-black text-white shadow-md"
+          >
+            {state?.completed ? "再次练习" : "进入 Subtopic"}
+          </Link>
+        ) : (
+          <div className="flex min-h-12 items-center justify-center rounded-2xl bg-[#f1f4ef] px-5 text-center text-sm font-black text-[#8a938d]">
+            🔒 完成讲解后解锁练习
+          </div>
+        )}
+      </div>
     </article>
   );
 }

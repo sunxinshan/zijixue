@@ -3,7 +3,10 @@ import { existsSync } from "node:fs";
 import path from "node:path";
 import test from "node:test";
 
-import { comparativeKnowledge, getPattern } from "@/data/knowledge/comparative";
+import {
+  comparativeKnowledge,
+  getSubtopic,
+} from "@/data/knowledge/comparative";
 import {
   evaluateUnderstandingAnswer,
   getInitialTeachingMode,
@@ -11,23 +14,28 @@ import {
 } from "@/lib/pattern-lesson";
 import type { TeachingContent, UnderstandingCheckQuestion } from "@/types/agent";
 
-test("comparative-than 使用两张已发布漫画和静态图片", () => {
-  const pattern = getPattern(comparativeKnowledge, "comparative-than");
-  assert.ok(pattern);
+test("普通比较级的所有 Pattern 都接入已发布漫画", () => {
+  const subtopic = getSubtopic(comparativeKnowledge, "comparative-basic");
+  assert.ok(subtopic);
+  const expectedPanels: Record<string, number> = {
+    "comparative-form": 1,
+    "comparative-than": 1,
+    "comparative-be": 2,
+    "comparative-action": 2,
+    "which-comparative": 2,
+  };
 
-  const panels = getPublishedComicPanels(pattern.teachingContent);
-  assert.equal(panels.length, 2);
-  assert.equal(getInitialTeachingMode(pattern.teachingContent), "comic");
-  assert.deepEqual(
-    panels.map((panel) => panel.order),
-    [1, 2],
-  );
+  for (const pattern of subtopic.patterns) {
+    const panels = getPublishedComicPanels(pattern.teachingContent);
+    assert.equal(panels.length, expectedPanels[pattern.id], pattern.id);
+    assert.equal(getInitialTeachingMode(pattern.teachingContent), "comic");
 
-  for (const panel of panels) {
-    assert.ok(panel.imageUrl.startsWith("/comic/"));
-    assert.ok(
-      existsSync(path.join(process.cwd(), "public", panel.imageUrl.slice(1))),
-    );
+    for (const panel of panels) {
+      assert.ok(panel.imageUrl.startsWith("/comic/"));
+      assert.ok(
+        existsSync(path.join(process.cwd(), "public", panel.imageUrl.slice(1))),
+      );
+    }
   }
 });
 
@@ -69,21 +77,21 @@ test("理解检查使用本地判分且不要求大小写一致", () => {
   const choice: UnderstandingCheckQuestion = {
     id: "choice",
     type: "choice",
-    prompt: "谁更高？",
-    options: ["Tom", "Ken"],
-    answer: "Tom",
-    explanation: "Tom 更高。",
+    prompt: "谁跑得更快？",
+    options: ["I", "Tom"],
+    answer: "I",
+    explanation: "I 跑得更快。",
   };
   const fillBlank: UnderstandingCheckQuestion = {
     id: "blank",
     type: "fill_blank",
-    prompt: "Tom is taller ___ Ken.",
+    prompt: "I run faster ___ Tom.",
     answer: "than",
     explanation: "使用 than。",
   };
 
-  assert.equal(evaluateUnderstandingAnswer(choice, "tom"), true);
-  assert.equal(evaluateUnderstandingAnswer(choice, "Ken"), false);
+  assert.equal(evaluateUnderstandingAnswer(choice, "i"), true);
+  assert.equal(evaluateUnderstandingAnswer(choice, "Tom"), false);
   assert.equal(evaluateUnderstandingAnswer(fillBlank, " THAN "), true);
   assert.equal(evaluateUnderstandingAnswer(fillBlank, "then"), false);
 });

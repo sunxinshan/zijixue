@@ -25,6 +25,7 @@ import {
   completeSession,
   getSubtopicLearningState,
   getSubtopicLearningStates,
+  isSubtopicLessonUnlocked,
   loadAgentStorage,
   recordAttempt,
   saveQuestions,
@@ -48,6 +49,7 @@ type GameStatus =
   | "question"
   | "analyzing"
   | "continue-ready"
+  | "lesson-locked"
   | "error";
 
 interface FeedbackState {
@@ -114,6 +116,20 @@ export function GameView({
           mode === "subtopic" && subtopic
             ? getSubtopicLearningState(storage, knowledge.id, subtopic.id)
             : undefined;
+        if (
+          mode === "subtopic" &&
+          subtopic &&
+          !isSubtopicLessonUnlocked(
+            storage,
+            knowledge.id,
+            subtopic,
+            currentLearningState,
+          )
+        ) {
+          setStatus("lesson-locked");
+          return;
+        }
+
         const response = await startAgentSession({
           userId: storage.userId,
           knowledge,
@@ -133,9 +149,7 @@ export function GameView({
         setPreviousQuestions(
           response.batch.questions.map((question) => question.question),
         );
-        setTeachingStage(
-          mode === "subtopic" && !currentLearningState ? "intro" : "practice",
-        );
+        setTeachingStage("practice");
         setStatus("question");
       } catch (error) {
         setErrorMessage(
@@ -319,6 +333,34 @@ export function GameView({
           <p className="mt-3 font-black text-[#315341]">
             超级大脑正在准备本批题目…
           </p>
+        </div>
+      </ForestBackdrop>
+    );
+  }
+
+  if (status === "lesson-locked" && subtopic) {
+    return (
+      <ForestBackdrop compact>
+        <div className="mx-auto flex min-h-[70vh] max-w-xl flex-col items-center justify-center rounded-[2rem] bg-white/92 p-8 text-center shadow-[0_20px_55px_rgba(47,108,66,0.14)]">
+          <span className="text-5xl">📖</span>
+          <h1 className="mt-4 text-2xl font-black text-[#173f2a]">
+            先完成讲解解锁
+          </h1>
+          <p className="mt-3 text-sm font-semibold leading-6 text-[#60786a]">
+            阅读漫画或文字讲解并完成理解检查后，才可以进入正式练习。
+          </p>
+          <Link
+            href={`/pattern/${knowledge.id}/${subtopic.id}`}
+            className="mt-6 flex min-h-14 w-full items-center justify-center rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-6 font-black text-white shadow-lg"
+          >
+            🔓 去解锁详情
+          </Link>
+          <Link
+            href={`/knowledge/${knowledge.id}`}
+            className="mt-3 text-sm font-black text-[#60786a]"
+          >
+            返回 Subtopic 列表
+          </Link>
         </div>
       </ForestBackdrop>
     );

@@ -1,25 +1,78 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
+import {
+  comparativeKnowledge,
+  getSubtopic,
+} from "@/data/knowledge/comparative";
 import { createInitialLearningState } from "@/lib/mastery";
 import {
   createInitialAgentStorage,
   expandLegacyLearningState,
+  isSubtopicLessonUnlocked,
   mergeLearningState,
   migrateLegacyStorage,
   recoverMissingSubtopicStates,
 } from "@/lib/storage";
 
-test("v2 Storage 使用 LearningState、Session、Attempt、Question 四类数据", () => {
+test("v2 Storage 使用 LearningState、Session、Attempt、Question 和 LessonProgress 数据", () => {
   const storage = createInitialAgentStorage();
   assert.deepEqual(Object.keys(storage).sort(), [
     "attempts",
     "learningStates",
+    "lessonProgress",
     "questions",
     "sessions",
     "userId",
     "version",
   ]);
+});
+
+test("新 Subtopic 默认锁定讲解，完成讲解或已有练习进度后解锁", () => {
+  const subtopic = getSubtopic(comparativeKnowledge, "comparative-basic");
+  assert.ok(subtopic);
+  const storage = createInitialAgentStorage();
+
+  assert.equal(
+    isSubtopicLessonUnlocked(storage, "comparative", subtopic),
+    false,
+  );
+  assert.equal(
+    isSubtopicLessonUnlocked({
+      ...storage,
+      lessonProgress: {
+        "comparative:comparative-basic": {
+          knowledgeId: "comparative",
+          subtopicId: "comparative-basic",
+          completed: true,
+        },
+      },
+    }, "comparative", subtopic),
+    true,
+  );
+
+  const legacyState = {
+    ...createInitialLearningState(
+      "local-user",
+      "comparative",
+      1,
+      "subtopic",
+      "comparative-basic",
+    ),
+    patternProgress: {
+      "comparative-form": {
+        patternId: "comparative-form",
+        attemptedQuestions: 1,
+        correctQuestions: 1,
+        coveredItems: ["tall"],
+        coverageComplete: false,
+      },
+    },
+  };
+  assert.equal(
+    isSubtopicLessonUnlocked(storage, "comparative", subtopic, legacyState),
+    true,
+  );
 });
 
 test("旧版 mastery、XP 和星星可迁移到 LearningState v2", () => {

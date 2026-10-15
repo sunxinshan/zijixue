@@ -10,6 +10,7 @@ import type {
   LearningState,
   Question,
   SessionSummary,
+  Subtopic,
 } from "@/types/agent";
 
 export const STORAGE_KEY = "english-forest";
@@ -94,6 +95,7 @@ export function createInitialAgentStorage(): AppStorage {
     sessions: [],
     attempts: [],
     questions: [],
+    lessonProgress: {},
   };
 }
 
@@ -266,6 +268,10 @@ function parseAgentStorage(raw: string | null): AppStorage {
               question.knowledgeSubtopic,
           }))
         : [],
+      lessonProgress:
+        parsed.lessonProgress && typeof parsed.lessonProgress === "object"
+          ? parsed.lessonProgress
+          : {},
       legacyXp: parsed.legacyXp,
       legacyStars: parsed.legacyStars,
     };
@@ -378,6 +384,48 @@ export function getSubtopicLearningStates(
     (state) =>
       state.knowledgeId === knowledgeId && state.scope === "subtopic",
   );
+}
+
+function lessonProgressKey(knowledgeId: string, subtopicId: string): string {
+  return `${knowledgeId}:${subtopicId}`;
+}
+
+export function isSubtopicLessonUnlocked(
+  storage: AppStorage,
+  knowledgeId: string,
+  subtopic: Subtopic,
+  state?: LearningState,
+): boolean {
+  if (storage.lessonProgress[lessonProgressKey(knowledgeId, subtopic.id)]?.completed) {
+    return true;
+  }
+  if (state?.completed) return true;
+  return subtopic.patterns.some(
+    (pattern) =>
+      (state?.patternProgress[pattern.id]?.attemptedQuestions ?? 0) > 0,
+  );
+}
+
+export function markSubtopicLessonComplete(
+  knowledgeId: string,
+  subtopicId: string,
+): AppStorage {
+  const current = loadAgentStorage();
+  const key = lessonProgressKey(knowledgeId, subtopicId);
+  const next: AppStorage = {
+    ...current,
+    lessonProgress: {
+      ...current.lessonProgress,
+      [key]: {
+        knowledgeId,
+        subtopicId,
+        completed: true,
+        completedAt: Date.now(),
+      },
+    },
+  };
+  saveAgentStorage(next);
+  return next;
 }
 
 export function isChallengeUnlocked(

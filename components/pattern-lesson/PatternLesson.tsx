@@ -16,11 +16,13 @@ export function PatternLesson({
   knowledgeId,
   subtopic,
   initialPatternId,
+  completeLabel = "开始练习",
   onComplete,
 }: {
   knowledgeId: string;
   subtopic: Subtopic;
   initialPatternId?: string;
+  completeLabel?: string;
   onComplete: () => void;
 }) {
   const [patternIndex, setPatternIndex] = useState(() => {
@@ -168,7 +170,7 @@ export function PatternLesson({
               ? "先完成理解检查"
               : patternIndex < subtopic.patterns.length - 1
                 ? "继续学习"
-                : "开始练习"}
+                : completeLabel}
           </button>
         </div>
       </section>
