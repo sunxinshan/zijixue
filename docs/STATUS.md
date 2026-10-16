@@ -182,3 +182,11 @@ LLM_BASE_URL=https://api.deepseek.com/v1
 4. 增加真实模型题目质量 eval。
 5. 增加 active Session 恢复。
 6. 验证后部署到生产环境。
+
+
+## 12. 新项目生产替换交接
+
+- 文档：`docs/ENGLISH_FOREST_V2_DEPLOYMENT_HANDOVER.md`
+- 范围：用新的 `zijixuenew` 项目替换 `yidongxun.com` 对应的旧 English Forest。
+- 不涉及 `paihangbang.xyz / ranking`。
+- 已记录独立 MySQL、FastAPI 8002、Next.js 8003、Nginx 切流和回滚步骤。
