@@ -334,21 +334,20 @@ interface TeachingContent {
 
 ## 4. 学生端真实业务流程
 
-### 4.1 Pattern 讲解解锁
+### 4.1 Subtopic 讲解解锁
 
 旧项目事实：
 
-1. Knowledge 页面每个 Pattern 独立显示：
-   - 未解锁：`🔓 解锁关口`
-   - 已解锁：`📖 查看讲解`
+1. Knowledge 页面每个 Subtopic 显示单个“解锁关口”。
 2. 讲解路由：
-   - `/pattern/{knowledgeId}/{subtopicId}/{patternId}`
-3. 完成单个 Pattern 讲解后，只解锁该 Pattern。
-4. 当前 Subtopic 所有 Pattern 都解锁后，才显示“开始练习”。
-5. 已有 PatternProgress / 已完成 Subtopic 的历史用户自动视为对应 Pattern 已解锁。
-6. 旧版本整体 Subtopic 解锁记录仍兼容。
-7. 当前练习解锁检查只在前端执行；直接调用 API 仍可能绕过。
-8. 新项目必须在后端强制执行解锁检查。
+   - `/pattern/{knowledgeId}/{subtopicId}`
+3. 讲解页按 Pattern 顺序展示该 Subtopic 的全部教学内容。
+4. 学生读完最后一个 Pattern 后点击“完成解锁”，即解锁整个 Subtopic。
+5. 理解检查是可选学习反馈，不阻塞“继续学习”或“完成解锁”。
+6. 已有 PatternProgress / 已完成 Subtopic 的历史用户自动视为该 Subtopic 已解锁。
+7. 旧版本整体 Subtopic 解锁记录仍兼容；短周期按 Pattern 全量解锁记录也兼容。
+8. 当前练习解锁检查只在前端执行；直接调用 API 仍可能绕过。
+9. 新项目必须在后端强制执行 Subtopic 解锁检查。
 
 ### 4.2 启动 Session
 
@@ -1542,10 +1541,9 @@ backend/
 - user_id FK
 - knowledge_id FK
 - subtopic_id FK
-- pattern_id FK
 - completed
 - completed_at
-- unique(user_id, knowledge_id, subtopic_id, pattern_id)
+- unique(user_id, knowledge_id, subtopic_id)
 
 #### lesson_check_progress
 
@@ -2054,20 +2052,35 @@ difficulty -> difficulty
 - Knowledge 基础信息。
 - Subtopic 列表。
 - 每个 Subtopic 的 Pattern 列表。
-- 当前用户的 Pattern 解锁状态。
+- 当前用户的 Subtopic 解锁状态。
 - 用户 LearningState 摘要。
 
 #### GET `/api/v1/catalog/patterns/{pattern_id}`
 
 返回 Pattern TeachingContent、ComicLesson、UnderstandingCheck。
 
-#### POST `/api/v1/catalog/patterns/{pattern_id}/lesson-complete`
+#### POST `/api/v1/catalog/subtopics/{subtopic_id}/lesson-complete`
+
+请求：
+
+```json
+{}
+```
+
+后端必须：
+
+1. 标记该 Subtopic LessonProgress.completed=true。
+2. 解锁该 Subtopic 的正式练习入口。
+3. 不要求 UnderstandingCheck 通过才能解锁。
+4. 返回最新 LessonProgress。
+
+#### POST `/api/v1/catalog/patterns/{pattern_id}/understanding-check`
 
 请求：
 
 ```json
 {
-  "check_answers": {
+  "answers": {
     "comparative-than-who": "I",
     "comparative-than-blank": "than"
   }
@@ -2077,9 +2090,9 @@ difficulty -> difficulty
 后端必须：
 
 1. 校验答案。
-2. 保存 LessonCheckProgress。
-3. 只在所有 UnderstandingCheck 通过时标记 Pattern 解锁。
-4. 返回最新 LessonProgress。
+2. 保存 Pattern 的 LessonCheckProgress。
+3. 返回对错、解析和是否全部通过。
+4. 检查结果只用于教学反馈，不控制 Subtopic 解锁。
 
 ### 15.3 学习 Session
 
@@ -2594,8 +2607,8 @@ challenge_unlocked = all(
 - 选项位置随机均衡。
 - Challenge 解锁。
 - Challenge finish。
-- Lesson per-pattern unlock。
-- UnderstandingCheck 持久化。
+- Subtopic lesson unlock。
+- UnderstandingCheck 持久化且不阻塞解锁。
 
 ### 19.2 API 测试
 
@@ -2613,10 +2626,10 @@ challenge_unlocked = all(
 
 - 新学生注册。
 - 浏览 Knowledge。
-- 依次解锁每个 Pattern。
-- 完成漫画和文字讲解。
-- 完成理解检查。
-- 解锁 Subtopic 练习。
+- 进入 Subtopic 讲解页。
+- 顺序完成该 Subtopic 的全部 Pattern 漫画和文字讲解。
+- 可选完成 UnderstandingCheck。
+- 点击“完成解锁”后解锁整个 Subtopic 练习。
 - 完成第一批题。
 - 错题触发强化。
 - Coverage 完成后 finish。
@@ -2686,15 +2699,17 @@ challenge_unlocked = all(
 - Pattern 卡片。
 - 漫画/文字切换。
 - 图片失败回退。
-- 单 Pattern 解锁。
-- 理解检查。
+- Subtopic 级“解锁关口”。
+- 阅读完成后整体解锁。
+- 可选理解检查。
 
 验收：
 
 - 有漫画默认漫画。
 - 无漫画默认文字。
 - 图片失败回退。
-- 检查通过后才解锁。
+- 读完该 Subtopic 全部 Pattern 后点击完成即可解锁。
+- 理解检查不阻塞解锁。
 - 阅读讲解不改变 Mastery。
 
 ### 阶段 5：正式练习
@@ -2823,7 +2838,7 @@ challenge_unlocked = all(
 
 ### 21.2 需要产品确认
 
-1. Pattern 独立解锁是否允许“查看讲解”后直接解锁，还是必须通过 UnderstandingCheck。
+1. UnderstandingCheck 是否需要作为可选反馈、补充强化或后续评分依据。
 2. 是否所有 Pattern 都必须配置 UnderstandingCheck。
 3. 漫画审核人是谁。
 4. Challenge 通过奖励具体是什么。
@@ -2875,7 +2890,7 @@ challenge_unlocked = all(
 - 正确题和错误题都保存 Attempt。
 - choice 和 true-false 本地语义一致。
 - 正确答案位置随机分布。
-- 每个 Pattern 独立解锁。
+- 每个 Subtopic 使用单个解锁关口，阅读完成后整体解锁。
 - Challenge 需全部 Subtopic 完成。
 - Challenge 推荐薄弱 Subtopic。
 
@@ -2902,7 +2917,7 @@ challenge_unlocked = all(
 - 漫画/文字切换能力。
 - 图片失败回退。
 - UnderstandingCheck。
-- Pattern 解锁门禁。
+- Subtopic 解锁门禁。
 - Coverage。
 - Mastery。
 - 错题强化。
@@ -2948,12 +2963,13 @@ challenge_unlocked = all(
 ### 学生学习
 
 - [ ] 浏览 Knowledge/Subtopic/Pattern。
-- [ ] 每个 Pattern 独立解锁。
+- [ ] 每个 Subtopic 使用单个解锁关口。
+- [ ] 读完全部 Pattern 后点击完成即可解锁。
 - [ ] 漫画/文字切换。
 - [ ] 无漫画回退文字。
 - [ ] 图片失败回退文字。
-- [ ] 理解检查可保存、恢复和重试。
-- [ ] 全部 Pattern 解锁后才能练习。
+- [ ] 理解检查可保存、恢复和重试，但不阻塞解锁。
+- [ ] Subtopic 解锁后才能练习。
 - [ ] 未解锁直接调用 API 会 403。
 
 ### 正式练习

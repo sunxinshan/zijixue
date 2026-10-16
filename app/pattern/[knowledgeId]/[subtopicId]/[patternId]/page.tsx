@@ -1,7 +1,4 @@
-import { notFound } from "next/navigation";
-
-import { PatternLessonPage } from "@/components/pattern-lesson/PatternLessonPage";
-import { getKnowledge, getSubtopic } from "@/data/knowledge/comparative";
+import { redirect } from "next/navigation";
 
 export default async function PatternDetailPage({
   params,
@@ -12,18 +9,6 @@ export default async function PatternDetailPage({
     patternId: string;
   }>;
 }) {
-  const { knowledgeId, subtopicId, patternId } = await params;
-  const knowledge = getKnowledge(knowledgeId);
-  const subtopic = knowledge ? getSubtopic(knowledge, subtopicId) : undefined;
-  const pattern = subtopic?.patterns.find((item) => item.id === patternId);
-
-  if (!knowledge || !subtopic || !pattern) notFound();
-
-  return (
-    <PatternLessonPage
-      knowledgeId={knowledge.id}
-      subtopic={subtopic}
-      patternId={pattern.id}
-    />
-  );
+  const { knowledgeId, subtopicId } = await params;
+  redirect(`/pattern/${knowledgeId}/${subtopicId}`);
 }

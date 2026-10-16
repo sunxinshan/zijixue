@@ -70,12 +70,11 @@ Question
 
 ### 讲解解锁
 
-- 每个 Pattern 独立提供“解锁关口 / 查看讲解”入口。
-- 单 Pattern 讲解路由为 `/pattern/{knowledgeId}/{subtopicId}/{patternId}`。
-- 每个 Pattern 独立记录解锁状态。
-- 当前 Subtopic 的所有 Pattern 都解锁后，才显示正式练习入口。
-- 直接访问练习 URL 时同样检查全部 Pattern 是否解锁。
-- 已有对应 Pattern 练习进度或已完成 Subtopic 的历史用户自动视为已解锁。
+- 每个 Subtopic 提供单个“解锁关口 / 查看讲解”入口。
+- 讲解路由为 `/pattern/{knowledgeId}/{subtopicId}`，按顺序展示该 Subtopic 的全部 Pattern。
+- 阅读完成后点击“完成解锁”，即解锁整个 Subtopic；理解检查是可选反馈，不阻塞解锁。
+- 已有 Pattern 练习进度或已完成 Subtopic 的历史用户自动视为已解锁。
+- 旧版按 Pattern 记录和整体 Subtopic 记录均可兼容。
 
 ## 4. Pattern Coverage
 

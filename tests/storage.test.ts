@@ -10,7 +10,6 @@ import {
   createInitialAgentStorage,
   expandLegacyLearningState,
   getLessonCheckProgressBySubtopic,
-  isPatternLessonUnlocked,
   isSubtopicLessonUnlocked,
   mergeLearningState,
   migrateLegacyStorage,
@@ -57,27 +56,32 @@ test("理解检查答案可按 Pattern 从存储中恢复", () => {
   );
 });
 
-test("每个 Pattern 独立解锁，全部解锁后才开放 Subtopic 练习", () => {
+test("Subtopic 阅读完成后整体解锁，并兼容旧 Pattern 解锁记录", () => {
   const subtopic = getSubtopic(comparativeKnowledge, "comparative-basic");
   assert.ok(subtopic);
-  const firstPattern = subtopic.patterns[0];
   const storage = createInitialAgentStorage();
 
-  assert.equal(
-    isPatternLessonUnlocked(
-      storage,
-      "comparative",
-      subtopic,
-      firstPattern,
-    ),
-    false,
-  );
   assert.equal(
     isSubtopicLessonUnlocked(storage, "comparative", subtopic),
     false,
   );
 
-  const onePatternUnlocked = {
+  const subtopicUnlocked = {
+    ...storage,
+    lessonProgress: {
+      "comparative:comparative-basic": {
+        knowledgeId: "comparative",
+        subtopicId: "comparative-basic",
+        completed: true,
+      },
+    },
+  };
+  assert.equal(
+    isSubtopicLessonUnlocked(subtopicUnlocked, "comparative", subtopic),
+    true,
+  );
+
+  const partiallyUnlocked = {
     ...storage,
     lessonProgress: {
       "comparative:comparative-basic:comparative-form": {
@@ -89,31 +93,26 @@ test("每个 Pattern 独立解锁，全部解锁后才开放 Subtopic 练习", (
     },
   };
   assert.equal(
-    isPatternLessonUnlocked(
-      onePatternUnlocked,
-      "comparative",
-      subtopic,
-      firstPattern,
-    ),
-    true,
-  );
-  assert.equal(
-    isSubtopicLessonUnlocked(onePatternUnlocked, "comparative", subtopic),
+    isSubtopicLessonUnlocked(partiallyUnlocked, "comparative", subtopic),
     false,
   );
 
-  const legacyUnlocked = {
+  const legacyPatternUnlocks = {
     ...storage,
-    lessonProgress: {
-      "comparative:comparative-basic": {
-        knowledgeId: "comparative",
-        subtopicId: "comparative-basic",
-        completed: true,
-      },
-    },
+    lessonProgress: Object.fromEntries(
+      subtopic.patterns.map((pattern) => [
+        `comparative:comparative-basic:${pattern.id}`,
+        {
+          knowledgeId: "comparative",
+          subtopicId: "comparative-basic",
+          patternId: pattern.id,
+          completed: true,
+        },
+      ]),
+    ),
   };
   assert.equal(
-    isSubtopicLessonUnlocked(legacyUnlocked, "comparative", subtopic),
+    isSubtopicLessonUnlocked(legacyPatternUnlocks, "comparative", subtopic),
     true,
   );
 
@@ -136,18 +135,8 @@ test("每个 Pattern 独立解锁，全部解锁后才开放 Subtopic 练习", (
     },
   };
   assert.equal(
-    isPatternLessonUnlocked(
-      storage,
-      "comparative",
-      subtopic,
-      firstPattern,
-      legacyState,
-    ),
-    true,
-  );
-  assert.equal(
     isSubtopicLessonUnlocked(storage, "comparative", subtopic, legacyState),
-    false,
+    true,
   );
 });
 

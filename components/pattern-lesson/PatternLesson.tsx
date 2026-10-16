@@ -49,16 +49,13 @@ export function PatternLesson({
   const mode = hasComic
     ? modeOverride ?? getInitialTeachingMode(content)
     : "text";
-  const hasUnderstandingCheck = Boolean(content.understandingCheck?.length);
   const currentCheckProgress = initialCheckProgress[pattern.id];
-  const canContinue = !hasUnderstandingCheck || currentCheckProgress?.passed === true;
 
   const handleComicError = () => {
     setComicFailed(true);
   };
 
   const handleContinue = () => {
-    if (!canContinue) return;
     if (patternIndex < subtopic.patterns.length - 1) {
       setComicFailed(false);
       setPatternIndex((current) => current + 1);
@@ -178,15 +175,12 @@ export function PatternLesson({
           </button>
           <button
             type="button"
-            disabled={!canContinue}
             onClick={handleContinue}
-            className="min-h-14 rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-5 font-black text-white shadow-lg disabled:cursor-not-allowed disabled:opacity-45"
+            className="min-h-14 rounded-2xl bg-gradient-to-r from-[#2d995b] to-[#58bd6d] px-5 font-black text-white shadow-lg"
           >
-            {!canContinue
-              ? "先完成理解检查"
-              : patternIndex < subtopic.patterns.length - 1
-                ? "继续学习"
-                : completeLabel}
+            {patternIndex < subtopic.patterns.length - 1
+              ? "继续学习"
+              : completeLabel}
           </button>
         </div>
       </section>
